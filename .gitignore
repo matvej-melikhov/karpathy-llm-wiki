@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+
+# Editor temp files
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+
+# Node (if any tooling appears later)
+node_modules/
+
+# Obsidian workspace (user-specific UI state)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
