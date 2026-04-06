@@ -1,0 +1,52 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f wiki/cache.md ] && cat wiki/cache.md || true"
+          },
+          {
+            "type": "prompt",
+            "prompt": "Если для этой сессии настроен vault (проверь CLAUDE.md на VAULT_PATH или папку wiki/ в текущей директории), молча прочитай wiki/cache.md, чтобы восстановить недавний контекст. Если wiki/cache.md не существует, ничего не делай — это non-vault сессия. Не объявляй об этом. Не отчитывайся о прочитанном. Просто имей контекст наготове."
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Контекст, инжектированный через хуки, не выживает после context compaction. Если wiki/cache.md существует в текущей директории, молча перечитай его сейчас, чтобы восстановить cache. Не объявляй об этом."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -d .git ] && git add wiki/ .raw/ 2>/dev/null && (git diff --cached --quiet || git commit -m \"wiki: auto-commit $(date '+%Y-%m-%d %H:%M')\" 2>/dev/null) || true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$PWD\" && [ -d wiki ] && [ -d .git ] && git diff --name-only HEAD 2>/dev/null | grep -q '^wiki/' && echo 'WIKI_CHANGED: Wiki-страницы были изменены в этой сессии. Пожалуйста, обнови wiki/cache.md краткой сводкой изменений (до 500 слов). Используй формат cache: Последнее обновление, Ключевые факты, Недавние изменения, Активные темы. Будь фактическим. Перезапиши файл целиком. Это кэш, не журнал.' || true"
+          }
+        ]
+      }
+    ]
+  }
+}
