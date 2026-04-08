@@ -1,6 +1,5 @@
 {
   "userIgnoreFilters": [
-    ".raw/",
     "skills/",
     "hooks/",
     "bin/",

@@ -21,7 +21,6 @@ mkdir -p "$OBSIDIAN_DIR"
 cat > "${OBSIDIAN_DIR}/app.json" <<'EOF'
 {
   "userIgnoreFilters": [
-    ".raw/",
     "skills/",
     "hooks/",
     "bin/",
@@ -48,7 +47,7 @@ EOF
 cat > "${OBSIDIAN_DIR}/graph.json" <<'EOF'
 {
   "collapse-filter": false,
-  "search": "-path:.raw -path:skills -path:hooks -path:bin -path:_templates",
+  "search": "-path:raw -path:skills -path:hooks -path:bin -path:_templates",
   "showTags": false,
   "showAttachments": false,
   "hideUnresolved": false,
