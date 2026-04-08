@@ -1,0 +1,13 @@
+{
+  "userIgnoreFilters": [
+    ".raw/",
+    "skills/",
+    "hooks/",
+    "bin/",
+    "_templates/"
+  ],
+  "newFileLocation": "folder",
+  "newFileFolderPath": "wiki",
+  "attachmentFolderPath": "_attachments",
+  "promptDelete": true
+}
