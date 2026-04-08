@@ -74,7 +74,7 @@ status: in-progress
 related:
   - "[[Любая упомянутая wiki-страница]]"
 sources:
-  - "[[.raw/source-если-применимо.md]]"
+  - "[[raw/source-если-применимо.md]]"
 ---
 ```
 

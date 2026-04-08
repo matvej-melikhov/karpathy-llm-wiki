@@ -21,7 +21,7 @@ status: <evaluation|in-progress|ready>
 related:
   - "[[Другая страница]]"
 sources:
-  - "[[.raw/articles/source-file.md]]"
+  - "[[raw/articles/source-file.md]]"
 ---
 ```
 

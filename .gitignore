@@ -16,3 +16,10 @@ node_modules/
 # Obsidian workspace (user-specific UI state)
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json
+
+# Wiki system files — created by /wiki INIT on first run
+# Not included in the template so INIT triggers on fresh clone
+wiki/index.md
+wiki/log.md
+wiki/cache.md
+wiki/summary.md
