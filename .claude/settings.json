@@ -26,17 +26,7 @@
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ -d .git ] && git add wiki/ .raw/ 2>/dev/null && (git diff --cached --quiet || git commit -m \"wiki: auto-commit $(date '+%Y-%m-%d %H:%M')\" 2>/dev/null) || true"
-          }
-        ]
-      }
-    ],
+    "PostToolUse": [],
     "Stop": [
       {
         "matcher": "",
