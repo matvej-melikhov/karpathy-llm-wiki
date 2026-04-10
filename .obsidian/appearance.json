@@ -1,6 +1,11 @@
 {
   "theme": "obsidian",
   "baseFontSize": 16,
-  "showInlineTitle": true,
-  "showViewHeader": true
+  "showViewHeader": true,
+  "cssTheme": "Meridian",
+  "accentColor": "#E8650A",
+  "translucency": false,
+  "enabledCssSnippets": [
+    "claudian-accent"
+  ]
 }

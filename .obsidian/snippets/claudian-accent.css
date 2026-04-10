@@ -1,0 +1,42 @@
+/* Claudian — fixes for Meridian base theme */
+
+/* Убираем прозрачность — Meridian делает фон transparent на macOS,
+   сквозь него виден размытый рабочий стол, выглядит ужасно */
+:not(.mod-windows).theme-dark {
+  --background-primary: #111111 !important;
+}
+
+.theme-dark {
+  --background-primary:     #111111;
+  --background-secondary:   #141414;
+  --background-primary-alt: #141414;
+
+  /* Контрастный текст */
+  --text-normal:  #f0f0f0;
+  --text-muted:   #888888;
+  --text-faint:   #555555;
+
+  /* Orange accent */
+  --color-accent:             #E8650A;
+  --color-accent-1:           #F07820;
+  --color-accent-2:           #C05508;
+  --interactive-accent:       #E8650A;
+  --interactive-accent-hover: #F07820;
+  --text-accent:              #E8650A;
+  --text-accent-hover:        #F07820;
+
+  /* Links */
+  --link-color:       #E8650A;
+  --link-color-hover: #F07820;
+
+  /* Tags */
+  --tag-color:       #E8650A;
+  --tag-background:  rgba(232, 101, 10, 0.15);
+
+  /* Checkboxes */
+  --checkbox-color:       #E8650A;
+  --checkbox-color-hover: #F07820;
+
+  /* Inline code */
+  --code-background: rgba(255, 255, 255, 0.07);
+}

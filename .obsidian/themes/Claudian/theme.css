@@ -1,0 +1,625 @@
+/* ============================================================
+   Claudian — Dark theme with warm orange accent
+   Inspired by the Claudian AI assistant UI aesthetic
+   ============================================================ */
+
+/* ── Color palette ─────────────────────────────────────────── */
+:root {
+  --claudian-bg-0:       #080808;   /* deepest black */
+  --claudian-bg-1:       #0d0d0d;   /* main background */
+  --claudian-bg-2:       #141414;   /* secondary background */
+  --claudian-bg-3:       #1a1a1a;   /* code blocks, inputs */
+  --claudian-bg-4:       #222222;   /* hover states */
+  --claudian-border:     #242424;   /* subtle borders */
+  --claudian-border-2:   #2e2e2e;   /* slightly visible borders */
+
+  --claudian-text:       #d4d4d4;   /* main text */
+  --claudian-text-muted: #888888;   /* secondary text */
+  --claudian-text-faint: #4a4a4a;   /* very dim text */
+
+  --claudian-orange:     #D4630C;   /* primary accent */
+  --claudian-orange-1:   #E07820;   /* lighter accent / hover */
+  --claudian-orange-2:   #A84D08;   /* darker accent / pressed */
+  --claudian-orange-bg:  rgba(212, 99, 12, 0.12); /* accent background tint */
+
+  --claudian-green:      #4ade80;   /* success / check */
+  --claudian-red:        #f87171;   /* error / delete */
+}
+
+/* ── Dark mode base variables ──────────────────────────────── */
+.theme-dark {
+  /* Obsidian base scale */
+  --color-base-00:  #000000;
+  --color-base-05:  #080808;
+  --color-base-10:  #0d0d0d;
+  --color-base-20:  #141414;
+  --color-base-25:  #1a1a1a;
+  --color-base-30:  #222222;
+  --color-base-35:  #2a2a2a;
+  --color-base-40:  #363636;
+  --color-base-50:  #555555;
+  --color-base-60:  #777777;
+  --color-base-70:  #999999;
+  --color-base-100: #d4d4d4;
+
+  /* Accent */
+  --color-accent-hsl:     25, 88%, 44%;
+  --color-accent:         var(--claudian-orange);
+  --color-accent-1:       var(--claudian-orange-1);
+  --color-accent-2:       var(--claudian-orange-2);
+
+  /* Backgrounds */
+  --background-primary:             var(--claudian-bg-1);
+  --background-primary-alt:         var(--claudian-bg-2);
+  --background-secondary:           var(--claudian-bg-2);
+  --background-secondary-alt:       var(--claudian-bg-0);
+  --background-modifier-border:     var(--claudian-border);
+  --background-modifier-border-hover: var(--claudian-border-2);
+  --background-modifier-border-focus: var(--claudian-orange-2);
+  --background-modifier-form-field: var(--claudian-bg-3);
+  --background-modifier-form-field-highlighted: var(--claudian-bg-4);
+  --background-modifier-hover:      rgba(255,255,255,0.035);
+  --background-modifier-active-hover: rgba(255,255,255,0.06);
+  --background-modifier-error:      rgba(248, 113, 113, 0.12);
+  --background-modifier-error-hover: rgba(248, 113, 113, 0.2);
+  --background-modifier-success:    rgba(74, 222, 128, 0.1);
+  --background-modifier-message:    var(--claudian-bg-0);
+
+  /* Text */
+  --text-normal:          var(--claudian-text);
+  --text-muted:           var(--claudian-text-muted);
+  --text-faint:           var(--claudian-text-faint);
+  --text-on-accent:       #ffffff;
+  --text-accent:          var(--claudian-orange);
+  --text-accent-hover:    var(--claudian-orange-1);
+  --text-error:           var(--claudian-red);
+  --text-success:         var(--claudian-green);
+  --text-highlight-bg:    var(--claudian-orange-bg);
+  --text-highlight-bg-active: rgba(212, 99, 12, 0.25);
+  --text-selection:       rgba(212, 99, 12, 0.2);
+
+  /* Interactive */
+  --interactive-normal:   var(--claudian-bg-3);
+  --interactive-hover:    var(--claudian-bg-4);
+  --interactive-accent:   var(--claudian-orange);
+  --interactive-accent-hsl: 25, 88%, 44%;
+  --interactive-accent-hover: var(--claudian-orange-1);
+
+  /* Scrollbar */
+  --scrollbar-bg:         transparent;
+  --scrollbar-thumb-bg:   var(--claudian-border-2);
+  --scrollbar-active-thumb-bg: var(--claudian-text-faint);
+
+  /* Dividers */
+  --divider-color:        var(--claudian-border);
+  --divider-color-hover:  var(--claudian-border-2);
+
+  /* Code */
+  --code-background:      var(--claudian-bg-3);
+  --code-normal:          #c9a96e;
+  --code-comment:         #666666;
+  --code-function:        var(--claudian-orange-1);
+  --code-important:       var(--claudian-orange);
+  --code-keyword:         #c792ea;
+  --code-operator:        #89ddff;
+  --code-property:        #9fdbfe;
+  --code-punctuation:     #888888;
+  --code-string:          #a8cc8c;
+  --code-tag:             var(--claudian-orange);
+  --code-value:           #f78c6c;
+
+  /* Headings */
+  --h1-color:  var(--claudian-text);
+  --h2-color:  var(--claudian-text);
+  --h3-color:  var(--claudian-text);
+  --h4-color:  var(--claudian-text);
+  --h5-color:  var(--claudian-text-muted);
+  --h6-color:  var(--claudian-text-muted);
+
+  /* Inline title */
+  --inline-title-color:   var(--claudian-text);
+  --inline-title-weight:  700;
+
+  /* Tags */
+  --tag-color:            var(--claudian-orange);
+  --tag-background:       var(--claudian-orange-bg);
+  --tag-background-hover: rgba(212, 99, 12, 0.22);
+  --tag-border-color:     transparent;
+  --tag-border-width:     0px;
+
+  /* Links */
+  --link-color:           var(--claudian-orange);
+  --link-color-hover:     var(--claudian-orange-1);
+  --link-external-color:  var(--claudian-orange-1);
+  --link-external-color-hover: var(--claudian-orange);
+  --link-unresolved-color: var(--claudian-text-muted);
+  --link-unresolved-opacity: 0.6;
+  --link-unresolved-decoration-color: var(--claudian-text-faint);
+
+  /* Checkboxes */
+  --checkbox-color:       var(--claudian-orange);
+  --checkbox-color-hover: var(--claudian-orange-1);
+  --checkbox-border-color: var(--claudian-text-faint);
+  --checkbox-border-color-hover: var(--claudian-text-muted);
+
+  /* Callouts */
+  --callout-default:      var(--claudian-orange);
+
+  /* Graph */
+  --graph-node:           var(--claudian-text-muted);
+  --graph-node-unresolved: var(--claudian-text-faint);
+  --graph-node-focused:   var(--claudian-orange);
+  --graph-node-tag:       var(--claudian-orange-1);
+  --graph-node-attachment: var(--claudian-text-muted);
+  --graph-line:           var(--claudian-border-2);
+  --graph-line-focused:   var(--claudian-orange-2);
+}
+
+/* ── Typography ────────────────────────────────────────────── */
+body {
+  --font-interface:        -apple-system, "Inter", "SF Pro Text", system-ui, sans-serif;
+  --font-text:             -apple-system, "Inter", "SF Pro Text", system-ui, sans-serif;
+  --font-monospace:        "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  --font-text-size:        15px;
+  --line-height-normal:    1.65;
+}
+
+/* ── Window chrome ─────────────────────────────────────────── */
+.workspace-ribbon {
+  background-color: var(--claudian-bg-0);
+  border-right: 1px solid var(--claudian-border);
+}
+
+.workspace-tab-header-container {
+  background-color: var(--claudian-bg-0);
+  border-bottom: 1px solid var(--claudian-border);
+}
+
+.workspace-tab-header {
+  background-color: transparent;
+  color: var(--claudian-text-muted);
+  border-radius: 4px 4px 0 0;
+}
+
+.workspace-tab-header.is-active {
+  background-color: var(--claudian-bg-1);
+  color: var(--claudian-text);
+  box-shadow: none;
+}
+
+.workspace-tab-header:hover {
+  background-color: var(--claudian-bg-2);
+  color: var(--claudian-text);
+}
+
+/* ── Sidebar / leaf ─────────────────────────────────────────── */
+.mod-left-split,
+.mod-right-split {
+  background-color: var(--claudian-bg-2);
+}
+
+.sidebar-toggle-button {
+  color: var(--claudian-text-muted);
+}
+
+/* ── Note view ──────────────────────────────────────────────── */
+.markdown-source-view,
+.markdown-preview-view,
+.cm-editor {
+  background-color: var(--claudian-bg-1);
+}
+
+/* Note padding */
+.markdown-source-view.mod-cm6 .cm-content,
+.markdown-preview-view .markdown-preview-section {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 28px 32px;
+}
+
+/* ── Headings ──────────────────────────────────────────────── */
+.cm-header-1, h1,
+.inline-title {
+  font-size: 1.9em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--claudian-text);
+  border-bottom: none;
+}
+
+.cm-header-2, h2 { font-size: 1.45em; font-weight: 600; }
+.cm-header-3, h3 { font-size: 1.2em;  font-weight: 600; color: var(--claudian-text-muted); }
+.cm-header-4, h4 { font-size: 1.0em;  font-weight: 600; color: var(--claudian-text-muted); }
+
+/* Inline title (note name at top) */
+.inline-title {
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+}
+
+/* ── Code blocks ───────────────────────────────────────────── */
+code {
+  background-color: var(--claudian-bg-3);
+  color: #c9a96e;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.88em;
+  border: 1px solid var(--claudian-border);
+}
+
+pre {
+  background-color: var(--claudian-bg-3) !important;
+  border: 1px solid var(--claudian-border);
+  border-radius: 6px;
+  padding: 16px 18px !important;
+}
+
+pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 0.87em;
+  line-height: 1.6;
+}
+
+/* Code block in preview */
+.markdown-preview-view pre {
+  background-color: var(--claudian-bg-3) !important;
+  border: 1px solid var(--claudian-border);
+}
+
+/* ── Links ─────────────────────────────────────────────────── */
+a,
+.cm-hmd-internal-link .cm-underline,
+.markdown-preview-view a {
+  color: var(--claudian-orange);
+  text-decoration: none;
+}
+
+a:hover,
+.markdown-preview-view a:hover {
+  color: var(--claudian-orange-1);
+  text-decoration: underline;
+}
+
+/* External link icon */
+.external-link::after {
+  content: none;
+}
+
+/* ── Tags ──────────────────────────────────────────────────── */
+.tag {
+  color: var(--claudian-orange);
+  background-color: var(--claudian-orange-bg);
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-size: 0.85em;
+  font-weight: 500;
+}
+
+/* ── Properties panel ──────────────────────────────────────── */
+.metadata-container {
+  background-color: var(--claudian-bg-2);
+  border-bottom: 1px solid var(--claudian-border);
+  border-radius: 0;
+}
+
+.metadata-properties-heading {
+  color: var(--claudian-text-muted);
+  font-size: 0.8em;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--claudian-border-2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--claudian-text-faint);
+}
+
+/* ── Status bar ────────────────────────────────────────────── */
+.status-bar {
+  background-color: var(--claudian-bg-0);
+  border-top: 1px solid var(--claudian-border);
+  color: var(--claudian-text-faint);
+  font-size: 11px;
+}
+
+.status-bar-item {
+  color: var(--claudian-text-faint);
+}
+
+/* ── Ribbon ─────────────────────────────────────────────────── */
+.side-dock-ribbon {
+  background-color: var(--claudian-bg-0);
+}
+
+.side-dock-ribbon-action {
+  color: var(--claudian-text-muted);
+}
+
+.side-dock-ribbon-action:hover,
+.side-dock-ribbon-action.is-active {
+  color: var(--claudian-orange);
+}
+
+/* ── File explorer ─────────────────────────────────────────── */
+.nav-file-title,
+.nav-folder-title {
+  color: var(--claudian-text-muted);
+  border-radius: 5px;
+  padding: 2px 6px;
+  font-size: 13px;
+}
+
+.nav-file-title:hover,
+.nav-folder-title:hover {
+  background-color: var(--claudian-bg-4);
+  color: var(--claudian-text);
+}
+
+.nav-file-title.is-active,
+.nav-folder-title.is-active {
+  background-color: var(--claudian-orange-bg);
+  color: var(--claudian-orange);
+}
+
+.nav-folder-collapse-indicator {
+  color: var(--claudian-text-faint);
+}
+
+/* ── Search ────────────────────────────────────────────────── */
+.search-result-file-title {
+  color: var(--claudian-orange);
+}
+
+.search-result-file-match {
+  color: var(--claudian-text-muted);
+}
+
+/* ── Modals ─────────────────────────────────────────────────── */
+.modal,
+.prompt {
+  background-color: var(--claudian-bg-2);
+  border: 1px solid var(--claudian-border-2);
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+}
+
+.modal-title {
+  color: var(--claudian-text);
+  font-weight: 600;
+}
+
+/* Quick switcher */
+.prompt-input-container input {
+  background-color: var(--claudian-bg-3);
+  border: 1px solid var(--claudian-border-2);
+  color: var(--claudian-text);
+  border-radius: 6px;
+}
+
+.suggestion-item.is-selected {
+  background-color: var(--claudian-orange-bg);
+  color: var(--claudian-orange);
+}
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+button.mod-cta {
+  background-color: var(--claudian-orange);
+  color: #ffffff;
+  font-weight: 500;
+  border-radius: 5px;
+}
+
+button.mod-cta:hover {
+  background-color: var(--claudian-orange-1);
+}
+
+button:not(.mod-cta) {
+  background-color: var(--claudian-bg-3);
+  color: var(--claudian-text-muted);
+  border: 1px solid var(--claudian-border);
+  border-radius: 5px;
+}
+
+button:not(.mod-cta):hover {
+  background-color: var(--claudian-bg-4);
+  color: var(--claudian-text);
+  border-color: var(--claudian-border-2);
+}
+
+/* ── Checkboxes ─────────────────────────────────────────────── */
+input[type="checkbox"]:checked {
+  background-color: var(--claudian-orange);
+  border-color: var(--claudian-orange);
+}
+
+/* Task list checkboxes */
+.task-list-item-checkbox {
+  border-color: var(--claudian-text-faint);
+}
+
+/* ── Blockquotes ─────────────────────────────────────────────── */
+blockquote {
+  border-left: 3px solid var(--claudian-orange);
+  background-color: var(--claudian-orange-bg);
+  color: var(--claudian-text-muted);
+  border-radius: 0 5px 5px 0;
+  padding: 8px 16px;
+  margin: 12px 0;
+}
+
+/* ── Tables ─────────────────────────────────────────────────── */
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th {
+  background-color: var(--claudian-bg-2);
+  color: var(--claudian-text);
+  font-weight: 600;
+  border-bottom: 2px solid var(--claudian-border-2);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+td {
+  border-bottom: 1px solid var(--claudian-border);
+  padding: 7px 12px;
+  color: var(--claudian-text-muted);
+}
+
+tr:hover td {
+  background-color: var(--claudian-bg-2);
+  color: var(--claudian-text);
+}
+
+/* ── Horizontal rule ─────────────────────────────────────────── */
+hr {
+  border: none;
+  border-top: 1px solid var(--claudian-border);
+  margin: 24px 0;
+}
+
+/* ── Callouts ─────────────────────────────────────────────────── */
+.callout {
+  background-color: var(--claudian-bg-2);
+  border-radius: 6px;
+  border-left: 4px solid var(--callout-color, var(--claudian-orange));
+}
+
+.callout-title {
+  font-weight: 600;
+}
+
+/* ── Graph view ─────────────────────────────────────────────── */
+.graph-view.color-fill-focused {
+  color: var(--claudian-orange);
+}
+
+/* ── Selection ─────────────────────────────────────────────── */
+::selection {
+  background-color: rgba(212, 99, 12, 0.2);
+}
+
+.cm-editor .cm-selectionBackground,
+.cm-editor .cm-focused .cm-selectionBackground {
+  background-color: rgba(212, 99, 12, 0.18) !important;
+}
+
+/* ── Highlight (==text==) ───────────────────────────────────── */
+mark {
+  background-color: rgba(212, 99, 12, 0.25);
+  color: var(--claudian-text);
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+/* ── Bold / italic accent ───────────────────────────────────── */
+strong {
+  color: var(--claudian-text);
+  font-weight: 700;
+}
+
+/* ── Cursor ─────────────────────────────────────────────────── */
+.cm-editor .cm-cursor {
+  border-left: 2px solid var(--claudian-orange);
+}
+
+/* ── Indent guides ──────────────────────────────────────────── */
+.cm-indent-markers::before {
+  border-left: 1px solid var(--claudian-border);
+}
+
+/* ── Leaf header ─────────────────────────────────────────────── */
+.view-header {
+  background-color: var(--claudian-bg-1);
+  border-bottom: 1px solid var(--claudian-border);
+}
+
+.view-header-title {
+  color: var(--claudian-text);
+  font-weight: 600;
+}
+
+.view-action {
+  color: var(--claudian-text-muted);
+}
+
+.view-action:hover {
+  color: var(--claudian-orange);
+}
+
+/* ── Workspace split borders ────────────────────────────────── */
+.workspace-split.mod-horizontal > .workspace-leaf:not(:last-child),
+.workspace-split.mod-vertical > .workspace-leaf-resize-handle {
+  border-right: 1px solid var(--claudian-border);
+}
+
+/* ── Toggle (settings) ──────────────────────────────────────── */
+.checkbox-container.is-enabled {
+  background-color: var(--claudian-orange);
+}
+
+.checkbox-container {
+  background-color: var(--claudian-bg-4);
+}
+
+/* ── Slider ─────────────────────────────────────────────────── */
+input[type="range"]::-webkit-slider-thumb {
+  background-color: var(--claudian-orange);
+}
+
+/* ── Notice / toast ─────────────────────────────────────────── */
+.notice {
+  background-color: var(--claudian-bg-3);
+  border: 1px solid var(--claudian-border-2);
+  color: var(--claudian-text);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+
+/* ── Plugin pane (right sidebar) ────────────────────────────── */
+.workspace-leaf-content[data-type] .view-header-title {
+  color: var(--claudian-orange);
+}
+
+/* ── Frontmatter / YAML ─────────────────────────────────────── */
+.cm-hmd-frontmatter {
+  color: var(--claudian-text-muted);
+}
+
+.cm-def {
+  color: var(--claudian-orange);
+}
+
+/* ── Mermaid diagrams ───────────────────────────────────────── */
+.mermaid .node rect,
+.mermaid .node circle,
+.mermaid .node polygon {
+  fill: var(--claudian-bg-3);
+  stroke: var(--claudian-border-2);
+}
+
+/* ── Print / export ─────────────────────────────────────────── */
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+}
