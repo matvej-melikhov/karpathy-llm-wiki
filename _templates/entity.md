@@ -6,9 +6,9 @@ role: ""
 first_mentioned: ""
 created: <% tp.date.now("YYYY-MM-DD") %>
 updated: <% tp.date.now("YYYY-MM-DD") %>
-tags:
-  - entity
+tags: []
 status: evaluation
+domain: []
 related: []
 sources: []
 ---
