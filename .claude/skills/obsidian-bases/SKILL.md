@@ -241,23 +241,24 @@ views:
       direction: ASC
 ```
 
-### Недавние ingest-ы
+### Идеи по домену
 
 ```yaml
 filters:
   and:
-    - file.inFolder("wiki/sources/")
+    - file.inFolder("wiki/ideas/")
 
 views:
   - type: table
-    name: "Источники"
+    name: "Идеи"
     order:
       - file.name
-      - source_type
-      - created
+      - domain
       - status
+      - tags
+      - updated
     groupBy:
-      property: source_type
+      property: domain
       direction: ASC
 ```
 
@@ -278,7 +279,7 @@ views:
 Храни `.base` файлы в `wiki/meta/` для дашбордов vault:
 - `wiki/meta/dashboard.base` — основной view содержимого
 - `wiki/meta/entities.base` — трекер сущностей
-- `wiki/meta/sources.base` — журнал ingestion
+- `wiki/meta/domains.base` — обзор доменов и их связей
 
 ---
 
