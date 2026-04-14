@@ -17,9 +17,11 @@ node_modules/
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json
 
+# TMP
 # Wiki system files — created by /wiki INIT on first run
 # Not included in the template so INIT triggers on fresh clone
-wiki/index.md
-wiki/log.md
-wiki/cache.md
-wiki/summary.md
+# wiki/
+
+*.png
+*.jpg
+*.webp

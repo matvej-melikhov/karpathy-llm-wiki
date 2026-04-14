@@ -1,4 +1,13 @@
 {
+  "permissions": {
+    "allow": [
+      "Edit(/.claude/skills/wiki/**)",
+      "Bash(rm /Users/melikhov.ma/Documents/diploma/llm-wiki/.claude/skills/wiki/references/modes.md && ls /Users/melikhov.ma/Documents/diploma/llm-wiki/.claude/skills/wiki/references/)",
+      "Edit(/.claude/skills/wiki-ingest/**)",
+      "Edit(/.claude/skills/save/**)",
+      "Edit(/.claude/skills/obsidian-bases/**)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {

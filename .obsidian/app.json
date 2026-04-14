@@ -1,4 +1,5 @@
 {
+  "colorScheme": "dark",
   "userIgnoreFilters": [
     "skills/",
     "hooks/",
@@ -8,5 +9,5 @@
   "newFileLocation": "folder",
   "newFileFolderPath": "wiki",
   "attachmentFolderPath": "_attachments",
-  "promptDelete": true
+  "promptDelete": false
 }
