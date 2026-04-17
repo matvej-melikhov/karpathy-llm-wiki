@@ -1,6 +1,5 @@
 ---
 type: question
-title: "<% tp.file.title %>"
 question: ""
 answer_quality: draft
 created: <% tp.date.now("YYYY-MM-DD") %>
@@ -17,7 +16,5 @@ sources: []
 ## Вопрос
 
 ## Ответ
-
-## Источники
 
 ## Открытые подвопросы
