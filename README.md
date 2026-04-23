@@ -12,6 +12,16 @@
 
 [Andrej Karpathy — LLM Wiki gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
 
+## Зависимости
+
+Для URL-ingestion требуется [defuddle](https://github.com/kepano/defuddle) — очищает веб-страницы от мусора и возвращает дословный markdown:
+
+```bash
+npm install -g defuddle
+```
+
+Без него `/ingest <url>` не работает (для file-ingestion из `raw/` defuddle не нужен).
+
 ## Статус
 
 В активной разработке.
