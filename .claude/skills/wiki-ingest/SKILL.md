@@ -27,7 +27,7 @@ description: "Загрузка источников в Obsidian wiki-vault. Чи
 
 ## Source-level дедуп
 
-Перед каждым ingest источника — проверка через `raw/meta/ingested.json`. Чтобы повторный ingest того же файла без изменений не запускал синтез заново.
+Перед каждым ingest источника — проверка через `raw/meta/ingested.json`. Чтобы повторный ingest того же файла или URL не запускал синтез заново.
 
 **Структура `raw/meta/ingested.json`:**
 
@@ -35,47 +35,64 @@ description: "Загрузка источников в Obsidian wiki-vault. Чи
 {
   "sources": {
     "raw/RLHF.md": {
-      "hash": "<sha256>",
+      "hash": "<sha256 содержимого>",
       "ingested_at": "2026-04-29T15:45:00",
-      "pages_created": [
-        "wiki/ideas/RLHF.md",
-        "wiki/ideas/PPO.md"
-      ],
-      "pages_updated": [
-        "wiki/index.md",
-        "wiki/cache.md"
-      ]
+      "pages_created": ["wiki/ideas/RLHF.md", "wiki/ideas/PPO.md"],
+      "pages_updated": ["wiki/index.md", "wiki/cache.md"]
+    },
+    "raw/articles/policy-gradient-2026-04-30.md": {
+      "source_url": "https://lilianweng.github.io/posts/2018-04-08-policy-gradient/",
+      "hash": "<sha256 тела без frontmatter>",
+      "ingested_at": "2026-04-30T10:00:00",
+      "pages_created": [...],
+      "pages_updated": [...]
     }
   }
 }
 ```
 
-**Перед ingest:**
+Поле `source_url` присутствует только у URL-источников. Хеш у URL-источников считается **только от тела** (без frontmatter с `fetched`-датой), чтобы тот же URL без изменений на странице давал тот же hash.
 
-1. Если файл `raw/meta/ingested.json` отсутствует — создать пустой `{"sources": {}}`.
-2. Посчитать хеш источника: `sha256sum raw/<path> | cut -d' ' -f1`.
-3. Прочитать `raw/meta/ingested.json`. Найти запись по ключу `raw/<path>`.
-4. Если запись есть и `hash` совпадает — пропустить ingest:
+### Для файла-источника (path)
+
+1. Если `raw/meta/ingested.json` отсутствует — создать `{"sources": {}}`.
+2. Посчитать `sha256sum raw/<path> | cut -d' ' -f1`.
+3. Найти запись по ключу `raw/<path>`. Если есть и `hash` совпадает — skip:
    ```
    Источник raw/RLHF.md уже обработан (без изменений с 2026-04-29).
-   Используй `/ingest --force [источник]` чтобы пересинтезировать.
+   Используй `/ingest --force` чтобы пересинтезировать.
    ```
-5. Иначе — продолжать с Synthesis Workflow.
+4. Иначе — продолжать.
 
-**После успешного ingest** (после Phase 8):
+### Для URL-источника
 
-1. Записать/обновить запись в `raw/meta/ingested.json`:
-   ```json
-   "raw/<path>": {
-     "hash": "<актуальный sha256>",
-     "ingested_at": "<текущая дата ISO>",
-     "pages_created": [<список созданных страниц>],
-     "pages_updated": [<список обновлённых страниц>]
-   }
-   ```
-2. Записать файл целиком (атомарно).
+1. Прочитать `raw/meta/ingested.json`.
+2. **Поиск по `source_url`**: пройти по всем записям в `sources`, найти запись с `source_url` == текущий URL.
+3. Если запись найдена и файл по её ключу-пути всё ещё существует:
+   - Скачать содержимое заново через defuddle (без сохранения).
+   - Посчитать sha256 нового содержимого.
+   - Сравнить с сохранённым `hash`:
+     - Совпадает → skip ("уже обработан, страница не изменилась").
+     - Различается → продолжать ingest, перезаписав файл.
+4. Если записи нет — продолжать как новый источник.
 
-**С флагом `--force`:** проверка пропускается, ingest идёт всегда. После успеха запись в manifest всё равно обновляется (новый hash).
+### После успешного ingest
+
+Записать/обновить запись в `raw/meta/ingested.json`:
+
+```json
+"raw/<path>": {
+  "source_url": "<URL если был>",
+  "hash": "<sha256>",
+  "ingested_at": "<ISO timestamp>",
+  "pages_created": [...],
+  "pages_updated": [...]
+}
+```
+
+### Force
+
+`/ingest --force` пропускает все проверки. После успеха запись в manifest обновляется как обычно.
 
 ---
 
@@ -83,18 +100,53 @@ description: "Загрузка источников в Obsidian wiki-vault. Чи
 
 Триггер: пользователь передаёт URL начинающийся с `https://`.
 
-Шаги:
+**Зависимость:** `defuddle` (см. `.claude/skills/defuddle/SKILL.md`). Если `which defuddle` не находит — попросить пользователя установить:
+```bash
+npm install -g defuddle
+```
 
-1. **Скачай** страницу через WebFetch.
-2. **Выведи slug** из пути URL (последний сегмент, lowercase, пробелы → дефисы, без query string).
-3. **Сохрани** в `raw/articles/[slug]-[YYYY-MM-DD].md` с заголовком frontmatter:
-   ```markdown
-   ---
-   source_url: [url]
-   fetched: [YYYY-MM-DD]
-   ---
+**Шаги:**
+
+1. **Дедуп по URL.** Прочитать `raw/meta/ingested.json`. Если есть запись с `source_url == [url]` И файл существует:
+   - Скачать страницу заново (`defuddle parse [url] --markdown`)
+   - Посчитать sha256 нового тела
+   - Совпал с сохранённым hash → skip ("страница не изменилась с прошлого ingest")
+   - Не совпал → перезаписать файл и продолжать ingest
+
+2. **Извлечь slug из URL** — последний сегмент пути, lowercase, пробелы → дефисы, без query.
+
+3. **Скачать и очистить через defuddle:**
+   ```bash
+   URL="https://..."
+   SLUG="policy-gradient"
+   DATE=$(date +%Y-%m-%d)
+   DEST="raw/articles/${SLUG}-${DATE}.md"
+
+   mkdir -p raw/articles
+   BODY=$(defuddle parse "${URL}" --markdown)
+   {
+     echo "---"
+     echo "source_url: ${URL}"
+     echo "fetched: ${DATE}"
+     echo "---"
+     echo ""
+     echo "${BODY}"
+   } > "${DEST}"
    ```
-4. Продолжи с **Synthesis Workflow** на сохранённом файле.
+
+   defuddle сохраняет дословный текст, картинки как `![alt](url)`, формулы LaTeX. Нет суммаризации.
+
+4. **Hash для дедупа** — sha256 от `${BODY}` (без frontmatter). Сохранить для записи в manifest.
+
+5. **Продолжать Synthesis Workflow** на сохранённом файле. После Phase 8 записать в manifest:
+   ```json
+   "raw/articles/policy-gradient-2026-04-30.md": {
+     "source_url": "https://...",
+     "hash": "<sha256 от BODY>",
+     "ingested_at": "...",
+     ...
+   }
+   ```
 
 ---
 
