@@ -1,10 +1,10 @@
 ---
-name: wiki-query
+name: query
 description: "Ответ на вопросы из wiki-vault. Сначала читает cache, потом index, потом релевантные страницы. Синтезирует ответ с цитатами. Файлирует хорошие ответы обратно в wiki. Поддерживает quick, standard, deep режимы. Триггеры: /query, что ты знаешь о, объясни, найди в wiki, query quick:, query deep:."
 allowed-tools: Read Glob Grep
 ---
 
-# wiki-query: запросы к wiki
+# query: запросы к wiki
 
 Wiki уже выполнила работу синтеза. Читай стратегически, отвечай точно, файлируй хорошие ответы обратно — и знание накапливается.
 

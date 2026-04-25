@@ -99,9 +99,9 @@ defuddle parse "${URL}" --json
 
 ---
 
-## Интеграция с wiki-ingest
+## Интеграция с ingest
 
-Скилл `wiki-ingest` вызывает defuddle автоматически при URL ingestion. См. секцию "URL ingestion" в `.claude/skills/wiki-ingest/SKILL.md`.
+Скилл `ingest` вызывает defuddle автоматически при URL ingestion. См. секцию "URL ingestion" в `.claude/skills/ingest/SKILL.md`.
 
 Вручную скачать страницу и затем ingestить:
 

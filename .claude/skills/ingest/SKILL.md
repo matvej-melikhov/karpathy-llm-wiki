@@ -1,9 +1,9 @@
 ---
-name: wiki-ingest
+name: ingest
 description: "Загрузка источников в Obsidian wiki-vault. Читает источник, синтезирует знание в страницы ideas/ и entities/, проставляет перекрёстные ссылки, записывает провенанс. Поддерживает файлы, URL, изображения и пакетный режим. Триггеры: ingest, /ingest, обработай этот источник, добавь это в wiki, прочитай и зафайлируй, batch ingest, ingest этот url."
 ---
 
-# wiki-ingest: синтез источников в wiki
+# ingest: синтез источников в wiki
 
 Прочитать источник → построить карту знания → решить гранулярность → создать или обогатить страницы → связать всё через wikilinks и frontmatter.
 
@@ -49,7 +49,7 @@ description: "Загрузка источников в Obsidian wiki-vault. Чи
 | 5 | Связать страницы | frontmatter (sources/related/tags/domain) + inline wikilinks |
 | 6 | Обновить инфраструктуру | index.md (таблица) + log.md + cache.md + summary.md |
 | 7 | Domain proposal | Если порог N=10 пройден тегом без domain — предложить создать |
-| 8 | Lint review | wiki-lint (read-only) → применить `open_issues` (auto-fix / ask / skip) |
+| 8 | Lint review | lint (read-only) → применить `open_issues` (auto-fix / ask / skip) |
 
 **Полные детали фаз 1-7:** `references/synthesis-phases.md`.
 **Полные детали Phase 8 + Fix-only:** `references/lint-fix.md`.

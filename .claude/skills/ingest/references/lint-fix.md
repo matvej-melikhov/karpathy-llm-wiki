@@ -13,13 +13,13 @@
 
 ## Phase 8 — Lint review (после synthesis)
 
-`wiki-lint` — read-only ревьюер. Он анализирует wiki и пишет отчёт в `wiki/meta/lint-state.json`. **Все правки делает ingest по этому отчёту.** Это разделение: lint = static analysis, ingest = единственный writer.
+`lint` — read-only ревьюер. Он анализирует wiki и пишет отчёт в `wiki/meta/lint-state.json`. **Все правки делает ingest по этому отчёту.** Это разделение: lint = static analysis, ingest = единственный writer.
 
 ### Шаги
 
-1. **Вызвать `wiki-lint`.** Без флагов — он сам решает, делать ли skip-check; в нашем случае wiki только что менялась, поэтому будет full audit. По завершении в `wiki/meta/lint-state.json` лежит свежий список `open_issues`.
+1. **Вызвать `lint`.** Без флагов — он сам решает, делать ли skip-check; в нашем случае wiki только что менялась, поэтому будет full audit. По завершении в `wiki/meta/lint-state.json` лежит свежий список `open_issues`.
 
-2. **Прочитать `wiki/meta/lint-state.json`.** Получить `open_issues`. Каждый issue имеет поле `type` — категория проверки (см. `.claude/skills/wiki-lint/SKILL.md`).
+2. **Прочитать `wiki/meta/lint-state.json`.** Получить `open_issues`. Каждый issue имеет поле `type` — категория проверки (см. `.claude/skills/lint/SKILL.md`).
 
 3. **Разнести issues по трём корзинам:**
 
@@ -29,7 +29,7 @@
    | **ask** | собрать в батч, спросить пользователя одним сообщением |
    | **skip** | оставить в `open_issues` без вопроса |
 
-   Принадлежность типа к категории — таблица "Категории issues" в `.claude/skills/wiki-lint/SKILL.md`.
+   Принадлежность типа к категории — таблица "Категории issues" в `.claude/skills/lint/SKILL.md`.
 
 4. **Применить auto-fix молча** (см. таблицу ниже).
 

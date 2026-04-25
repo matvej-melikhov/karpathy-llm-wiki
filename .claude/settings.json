@@ -2,11 +2,13 @@
   "permissions": {
     "allow": [
       "Edit(/.claude/skills/wiki/**)",
-      "Bash(rm /Users/melikhov.ma/Documents/diploma/llm-wiki/.claude/skills/wiki/references/modes.md && ls /Users/melikhov.ma/Documents/diploma/llm-wiki/.claude/skills/wiki/references/)",
-      "Edit(/.claude/skills/wiki-ingest/**)",
+      "Edit(/.claude/skills/ingest/**)",
+      "Edit(/.claude/skills/query/**)",
+      "Edit(/.claude/skills/lint/**)",
       "Edit(/.claude/skills/save/**)",
+      "Edit(/.claude/skills/defuddle/**)",
       "Edit(/.claude/skills/obsidian-bases/**)",
-      "Edit(/.claude/skills/wiki-query/**)"
+      "Edit(/.claude/skills/obsidian-markdown/**)"
     ]
   },
   "hooks": {
