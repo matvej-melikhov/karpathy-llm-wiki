@@ -103,6 +103,8 @@ Lint **только читает** wiki и записывает структур
 | `raw-link-with-extension` | `[[raw/X.md]]` вместо `[[raw/X]]` | `{type, where, link}` |
 | `raw-ref-in-body` | упоминание `[[raw/...]]` в теле страницы | `{type, where, link, line}` |
 | `empty-sources-section` | секция `## Источники`/`## Источники упоминания` содержит только `[[raw/...]]` | `{type, where, section}` |
+| `folder-type-mismatch` | страница лежит в `wiki/<X>/`, но `type:` во frontmatter не соответствует папке | `{type, where, current_type, expected_type}` |
+| `stale-index-entry` | строка в `wiki/index.md` ссылается на несуществующую страницу (была удалена/переименована) | `{type, link, section}` |
 
 ### Ask user (ingest спрашивает решение)
 
@@ -115,6 +117,9 @@ Lint **только читает** wiki и записывает структур
 | `missing-concept` | концепция упомянута в ≥3 страницах без своей wiki-страницы | `{type, term, mentioned_in: [...]}` |
 | `contradiction` | противоречие между утверждениями двух страниц | `{type, page_a, page_b, claim}` |
 | `outdated-claim` | утверждение в `[[A]]` потенциально опровергнуто `[[B]]` | `{type, where, claim, conflicts_with}` |
+| `missing-index-entry` | content-страница (idea/entity/question/domain) существует в файлах, но строка о ней отсутствует в `wiki/index.md` | `{type, where, page_type}` |
+| `dangling-domain-ref` | страница имеет в `domain:` frontmatter ссылку на несуществующую domain-страницу | `{type, where, missing_domain}` |
+| `asymmetric-related` | у страницы `[[A]]` в `related:` есть `[[B]]`, но у `[[B]]` в `related:` нет `[[A]]` | `{type, page_a, page_b}` |
 
 ### Skip (только записываем, не спрашиваем)
 
@@ -144,9 +149,13 @@ Lint **только читает** wiki и записывает структур
 | 11 | `[[raw/X.md]]` (с расширением) в `sources` | auto-fix |
 | 12 | Raw-refs в теле страницы | auto-fix |
 | 13 | "Sources"-секция с одним raw | auto-fix |
+| 13.1 | Папка vs `type:` во frontmatter | auto-fix |
+| 13.2 | Битые строки в `index.md` (ссылка на удалённую страницу) | auto-fix |
+| 13.3 | Страница есть, строки в `index.md` нет | ask |
+| 13.4 | `domain:` ссылается на несуществующую domain-страницу | ask |
+| 13.5 | Асимметричные `related:` (A→B без B→A) | ask |
 | 14 | Пустые секции | skip |
 | 15 | Стилистические нарушения | skip |
-| 16 | Устаревшие записи в `index.md` (ведут на удалённые страницы) | ask |
 
 ---
 
