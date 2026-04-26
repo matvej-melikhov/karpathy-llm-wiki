@@ -18,12 +18,33 @@ Lint **только читает** wiki и записывает структур
 
 ---
 
+## Two-layer архитектура
+
+Lint работает в два слоя:
+
+**Layer 1 — программная проверка (`bin/lint.py`).** Python-скрипт, реализующий все детерминистические проверки: 13 типов issues. Запускается за секунды, без LLM-стоимости. Пишет `lint-state.json` с найденными `open_issues`.
+
+**Layer 2 — LLM-семантическая проверка.** Этот скилл (lint) запускается после `bin/lint.py`, читает уже записанный state, дополняет `open_issues` семантическими проверками: `contradiction`, `outdated-claim`, `missing-concept`, `style-nit`. Это требует языкового суждения, программно не делается.
+
+Полный поток `/lint`:
+
+```
+1. python3 bin/lint.py        # Layer 1: детерминистика. Создаёт lint-state.json
+2. lint skill (этот документ)  # Layer 2: LLM добавляет семантические issues
+3. Итог: lint-state.json содержит обе категории open_issues
+```
+
+Если Layer 1 упал (нет Python и т.д.), скилл может выполнить детерминистические проверки сам, но это медленнее и дороже токенов.
+
+---
+
 ## Команда и флаги
 
 | Команда | Поведение |
 |---|---|
-| `/lint` | Skip-check по hash. Если wiki не менялась И нет open_issues — пропуск. Иначе full audit. |
-| `/lint --force` | Игнорировать skip-check, всегда full audit. |
+| `/lint` | Запустить Layer 1 + Layer 2. Skip-check по hash. Если wiki не менялась И нет open_issues — пропуск. |
+| `/lint --force` | Игнорировать skip-check, всегда full audit (оба слоя). |
+| `/lint --fast` | Только Layer 1 (программный), без LLM-фазы. Быстро, но без семантических проверок. |
 
 После audit:
 - если есть open_issues — список выводится пользователю
@@ -32,6 +53,8 @@ Lint **только читает** wiki и записывает структур
 ---
 
 ## Skip-check (агрегатный hash)
+
+Skip-check выполняется в Layer 1 (`bin/lint.py`). Если wiki не менялась с последнего audit и нет накопленных open_issues — оба слоя пропускаются.
 
 `wiki/meta/lint-state.json` хранит результат последнего audit:
 
