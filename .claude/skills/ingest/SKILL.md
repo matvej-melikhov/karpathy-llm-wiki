@@ -29,7 +29,8 @@ description: "Загрузка источников в Obsidian wiki-vault. Чи
 
 | Источник | Что читать |
 |---|---|
-| **Файл** (`raw/<path>.md`) | `references/dedup.md` (проверка hash) → Synthesis Workflow |
+| **Markdown файл** (`raw/<path>.md`) | `references/dedup.md` (проверка hash) → Synthesis Workflow |
+| **PDF/DOCX** (`raw/formats/<file>` или `raw/<file>`) | сначала вызвать `/transcribe` → восстановленный `.md` в `raw/` → Synthesis Workflow |
 | **URL** (`https://...`) | `references/url-ingestion.md` (defuddle + URL-дедуп) → Synthesis Workflow |
 | **Изображение** (`.png`/`.jpg`/`.jpeg`/`.gif`/`.webp`/`.svg`/`.avif`) | секция Image ingestion ниже → Synthesis Workflow |
 | **Без источника** (`--fix`) | сразу `references/lint-fix.md` (Fix-only mode) |

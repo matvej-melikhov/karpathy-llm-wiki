@@ -1,0 +1,103 @@
+# Интеграция с wiki и ingest
+
+Как восстановленный `.md` становится источником для синтеза знаний.
+
+---
+
+## Frontmatter восстановленного файла
+
+Каждый `raw/<stem>.md` получает frontmatter:
+
+```yaml
+---
+source_type: pdf
+original_file: raw/formats/paper.pdf
+restored: true
+restored_at: 2026-05-01T10:30:00
+pages: 26
+---
+```
+
+Этот файл — обычный `.md`-источник. Он читается `ingest` как любой другой файл из `raw/`.
+
+---
+
+## `sources:` в wiki-страницах
+
+При синтезе из транскрипта в frontmatter wiki-страниц ставится только
+ссылка на восстановленный `.md`:
+
+```yaml
+sources:
+  - "[[raw/paper]]"     # ← восстановленный .md, без расширения
+```
+
+**Не ставить** ссылку на бинарный оригинал `[[raw/formats/paper.pdf]]` —
+он не рендерится в Obsidian. Если reviewer хочет проверить оригинал —
+он откроет `raw/paper.md` и увидит там `original_file: raw/formats/paper.pdf`.
+
+---
+
+## Запуск transcribe из ingest
+
+Когда `/ingest` получает файл с расширением `.pdf`, `.docx` (или находит
+такой файл в `raw/formats/`), он:
+
+1. Вызывает `transcribe` скилл для генерации `.md`
+2. Дожидается завершения
+3. Продолжает с `raw/<stem>.md` как обычным источником
+
+Routing-строка в `ingest/SKILL.md`:
+
+| Источник | Что читать |
+|---|---|
+| PDF/DOCX в `raw/formats/` или `raw/` | сначала `/transcribe <file>` → затем synthesis |
+
+---
+
+## Дедуп в `raw/meta/ingested.json`
+
+Манифест хранит записи для **обоих** файлов — оригинала и транскрипта:
+
+```json
+{
+  "sources": {
+    "raw/formats/paper.pdf": {
+      "original_hash": "<sha256 binary>",
+      "restored_to": "raw/paper.md",
+      "restored_hash": "<sha256 restored .md>",
+      "source_type": "pdf",
+      "pages": 26,
+      "restored": true,
+      "transcribed_at": "2026-05-01T10:30:00",
+      "ingested_at": "2026-05-01T11:00:00",
+      "pages_created": ["wiki/ideas/X.md"],
+      "pages_updated": ["wiki/index.md"]
+    }
+  }
+}
+```
+
+**Логика re-инжеста:**
+- `original_hash` совпадает → файл не изменился → skip
+- `original_hash` изменился → перепрогнать transcribe + ingest
+- `--force` → игнорировать оба hash
+
+---
+
+## Изображения в wiki
+
+Изображения, извлечённые при Step 1, находятся в `_attachments/`.
+В восстановленном `.md` они встроены через Obsidian embeds:
+
+```markdown
+## Архитектура
+
+![[paper-p5-img0.png]]
+
+Рисунок 2 показывает...
+```
+
+В wiki-страницах агент **может включить** те же изображения через `![[image.png]]`
+если они существенны для понимания концепции. Изображения из `_attachments/`
+автоматически отображаются в Obsidian как embedded previews.

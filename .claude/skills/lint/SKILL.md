@@ -143,6 +143,7 @@ Skip-check выполняется в Layer 1 (`bin/lint.py`). Если wiki не
 | `missing-index-entry` | content-страница (idea/entity/question/domain) существует в файлах, но строка о ней отсутствует в `wiki/index.md` | `{type, where, page_type}` |
 | `dangling-domain-ref` | страница имеет в `domain:` frontmatter ссылку на несуществующую domain-страницу | `{type, where, missing_domain}` |
 | `asymmetric-related` | у страницы `[[A]]` в `related:` есть `[[B]]`, но у `[[B]]` в `related:` нет `[[A]]` | `{type, page_a, page_b}` |
+| `binary-source-outside-formats` | бинарный файл (.pdf/.docx/audio) лежит в `raw/` вне папки `raw/formats/` | `{type, where, suggested}` |
 
 ### Skip (только записываем, не спрашиваем)
 
@@ -177,6 +178,7 @@ Skip-check выполняется в Layer 1 (`bin/lint.py`). Если wiki не
 | 13.3 | Страница есть, строки в `index.md` нет | ask |
 | 13.4 | `domain:` ссылается на несуществующую domain-страницу | ask |
 | 13.5 | Асимметричные `related:` (A→B без B→A) | ask |
+| 13.6 | Бинарный источник вне `raw/formats/` | ask |
 | 14 | Пустые секции | skip |
 | 15 | Стилистические нарушения | skip |
 

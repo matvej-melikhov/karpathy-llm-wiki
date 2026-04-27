@@ -44,6 +44,17 @@ from typing import Any, Iterable
 WIKI_ROOT = Path("wiki")
 LINT_STATE_PATH = WIKI_ROOT / "meta" / "lint-state.json"
 
+RAW_ROOT = Path("raw")
+RAW_FORMATS_DIR = RAW_ROOT / "formats"
+
+# Binary extensions that should live in raw/formats/, not raw/ root
+BINARY_SOURCE_EXTENSIONS = {
+    ".pdf", ".docx", ".doc",
+    ".mp3", ".wav", ".m4a", ".ogg", ".flac",
+    ".mp4", ".mov", ".avi", ".mkv", ".webm",
+    ".pptx", ".ppt", ".xlsx", ".xls",
+}
+
 # Folder ↔ frontmatter `type:` mapping. Folder is source of truth.
 FOLDER_TO_TYPE = {
     "ideas": "idea",
@@ -799,6 +810,37 @@ def check_missing_index_entry(pages: list[Page]) -> Iterable[Issue]:
 # ────────────────────────────────────────────────────────────────────────
 
 
+# ────────────────────────────────────────────────────────────────────────
+# raw/ structure checks (scans raw/, not wiki/)
+# ────────────────────────────────────────────────────────────────────────
+
+
+def check_binary_source_outside_formats(pages: list[Page]) -> Iterable[Issue]:
+    """Binary source files (PDF, DOCX, audio, video) should live in
+    raw/formats/, not in raw/ root or other raw/ subdirectories.
+
+    The agent (transcribe skill) moves them on next /transcribe call, so
+    this is in ask-category — user confirms before the move.
+    """
+    if not RAW_ROOT.is_dir():
+        return
+    for f in RAW_ROOT.rglob("*"):
+        if not f.is_file():
+            continue
+        try:
+            rel = f.relative_to(RAW_ROOT)
+        except ValueError:
+            continue
+        # Skip files already in raw/formats/ or raw/meta/
+        if rel.parts[0] in ("formats", "meta"):
+            continue
+        if f.suffix.lower() in BINARY_SOURCE_EXTENSIONS:
+            yield Issue("binary-source-outside-formats", {
+                "where": f.as_posix(),
+                "suggested": str(RAW_FORMATS_DIR / f.name),
+            })
+
+
 def check_empty_section(pages: list[Page]) -> Iterable[Issue]:
     """Heading (## or higher) followed by no non-empty content before the
     next heading or end of file. Skip-category — informational only, since
@@ -913,6 +955,7 @@ _CHECKS: list[tuple[str, Any]] = [
     ("stale-index-entry", check_stale_index_entry),
     ("missing-index-entry", check_missing_index_entry),
     ("empty-section", check_empty_section),
+    ("binary-source-outside-formats", check_binary_source_outside_formats),
 ]
 
 

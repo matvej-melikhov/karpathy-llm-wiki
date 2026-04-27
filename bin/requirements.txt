@@ -1,0 +1,5 @@
+# Python dependencies for llm-wiki tooling.
+# Install via:  pip3 install --user -r bin/requirements.txt
+# (or run bin/setup.sh which does this for you)
+
+pymupdf4llm>=0.0.27   # PDF → raw markdown for bin/transcribe.py
