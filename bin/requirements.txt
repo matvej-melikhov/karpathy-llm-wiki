@@ -3,3 +3,4 @@
 # (or run bin/setup.sh which does this for you)
 
 pymupdf4llm>=0.0.27   # PDF → raw markdown for bin/transcribe.py
+pytest>=8.0           # unit tests: python3 -m pytest bin/tests/
