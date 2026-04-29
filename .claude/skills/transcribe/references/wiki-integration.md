@@ -55,33 +55,20 @@ Routing-строка в `ingest/SKILL.md`:
 
 ---
 
-## Дедуп в `raw/meta/ingested.json`
+## Дедуп на уровне transcribe
 
-Манифест хранит записи для **обоих** файлов — оригинала и транскрипта:
+`raw/meta/ingested.json` — зона ответственности `/ingest`, не `/transcribe`.
 
-```json
-{
-  "sources": {
-    "raw/formats/paper.pdf": {
-      "original_hash": "<sha256 binary>",
-      "restored_to": "raw/paper.md",
-      "restored_hash": "<sha256 restored .md>",
-      "source_type": "pdf",
-      "pages": 26,
-      "restored": true,
-      "transcribed_at": "2026-05-01T10:30:00",
-      "ingested_at": "2026-05-01T11:00:00",
-      "pages_created": ["wiki/ideas/X.md"],
-      "pages_updated": ["wiki/index.md"]
-    }
-  }
-}
+Transcribe использует простой файловый дедуп: если `raw/<stem>.md` уже существует и новее оригинала — skip:
+
+```
+raw/formats/paper.pdf   mtime: 2026-05-01 10:00
+raw/paper.md            mtime: 2026-05-01 11:00  → skip (транскрипт актуален)
 ```
 
-**Логика re-инжеста:**
-- `original_hash` совпадает → файл не изменился → skip
-- `original_hash` изменился → перепрогнать transcribe + ingest
-- `--force` → игнорировать оба hash
+Флаг `--force` обходит проверку.
+
+При запуске `/ingest raw/paper.md` — ingest записывает обычную запись в `raw/meta/ingested.json` для `raw/paper.md` (как для любого .md источника). Из какого PDF получен транскрипт — видно из frontmatter `.md` файла (`source: raw/formats/paper.pdf`).
 
 ---
 
