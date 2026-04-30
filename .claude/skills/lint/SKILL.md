@@ -18,20 +18,22 @@ Lint **только читает** wiki и записывает структур
 
 ---
 
-## Two-layer архитектура
+## Two-layer (плюс опциональный 1.5) архитектура
 
-Lint работает в два слоя:
+Lint работает в два слоя плюс опциональный embedding-based слой:
 
-**Layer 1 — программная проверка (`bin/lint.py`).** Python-скрипт, реализующий все детерминистические проверки: 13 типов issues. Запускается за секунды, без LLM-стоимости. Пишет `lint-state.json` с найденными `open_issues`.
+**Layer 1 — программная проверка (`bin/lint.py`).** Python-скрипт, реализующий все детерминистические проверки: 16 типов issues. Запускается за секунды, без LLM-стоимости. Пишет `lint-state.json` с найденными `open_issues`.
+
+**Layer 1.5 — embedding-based (опционально, `--approx`).** Те же `bin/lint.py`, но с флагом `--approx` подключаются проверки на основе предварительно посчитанных эмбеддингов: `similar-but-unlinked` (semantic missing links) и `synthesis-drift` (детектор отклонения синтеза от источников). Чистые потребители векторов — Ollama не нужна для lint, только `bin/embed.py update` должен быть выполнен заранее.
 
 **Layer 2 — LLM-семантическая проверка.** Этот скилл (lint) запускается после `bin/lint.py`, читает уже записанный state, дополняет `open_issues` семантическими проверками: `contradiction`, `outdated-claim`, `missing-concept`, `style-nit`. Это требует языкового суждения, программно не делается.
 
 Полный поток `/lint`:
 
 ```
-1. python3 bin/lint.py        # Layer 1: детерминистика. Создаёт lint-state.json
-2. lint skill (этот документ)  # Layer 2: LLM добавляет семантические issues
-3. Итог: lint-state.json содержит обе категории open_issues
+1. python3 bin/lint.py [--approx]  # Layer 1 (+ 1.5 если --approx)
+2. lint skill (этот документ)       # Layer 2: LLM добавляет семантические issues
+3. Итог: lint-state.json содержит все категории open_issues
 ```
 
 Если Layer 1 упал (нет Python и т.д.), скилл может выполнить детерминистические проверки сам, но это медленнее и дороже токенов.
@@ -45,6 +47,17 @@ Lint работает в два слоя:
 | `/lint` | Запустить Layer 1 + Layer 2. Skip-check по hash. Если wiki не менялась И нет open_issues — пропуск. |
 | `/lint --force` | Игнорировать skip-check, всегда full audit (оба слоя). |
 | `/lint --fast` | Только Layer 1 (программный), без LLM-фазы. Быстро, но без семантических проверок. |
+| `/lint --approx` | Layer 1 + Layer 1.5 + Layer 2. Подключает embedding-based проверки. Требует предварительного `python3 bin/embed.py update`. |
+| `/lint --approx --fast` | Layer 1 + Layer 1.5 без LLM-слоя. Покрывает максимум структурных + семантических нарушений без затрат на LLM. |
+
+**Параметры тонкой настройки `--approx`:**
+
+| Флаг | По умолчанию | Что делает |
+|---|---|---|
+| `--similarity-percentile FLOAT` | 95 | Для `similar-but-unlinked`: пары выше этого перцентиля попарных косинусов считаются близкими |
+| `--drift-std FLOAT` | 1.5 | Для `synthesis-drift`: множитель std-deviations над средним drift'ом |
+
+Плюс встроенные floor-значения (cosine ≥ 0.6, drift ≥ 0.1) — защита от ложных срабатываний на «плоских» распределениях.
 
 После audit:
 - если есть open_issues — список выводится пользователю
@@ -144,6 +157,8 @@ Skip-check выполняется в Layer 1 (`bin/lint.py`). Если wiki не
 | `dangling-domain-ref` | страница имеет в `domain:` frontmatter ссылку на несуществующую domain-страницу | `{type, where, missing_domain}` |
 | `asymmetric-related` | у страницы `[[A]]` в `related:` есть `[[B]]`, но у `[[B]]` в `related:` нет `[[A]]` | `{type, page_a, page_b}` |
 | `binary-source-outside-formats` | бинарный файл (.pdf/.docx/audio) лежит в `raw/` вне папки `raw/formats/` | `{type, where, suggested}` |
+| `similar-but-unlinked` | две страницы семантически близки (cosine выше порога), но wikilink между ними отсутствует. Только в режиме `--approx` | `{type, page_a, page_b, similarity, threshold}` |
+| `synthesis-drift` | wiki-страница семантически далеко ушла от центроида эмбеддингов своих источников. Сигнал о возможной галлюцинации синтеза. Только в режиме `--approx` | `{type, where, drift, threshold}` |
 
 ### Skip (только записываем, не спрашиваем)
 
@@ -181,6 +196,8 @@ Skip-check выполняется в Layer 1 (`bin/lint.py`). Если wiki не
 | 13.6 | Бинарный источник вне `raw/formats/` | ask |
 | 14 | Пустые секции | skip |
 | 15 | Стилистические нарушения | skip |
+| 16 | `similar-but-unlinked` (только `--approx`) | ask |
+| 17 | `synthesis-drift` (только `--approx`) | ask |
 
 ---
 
