@@ -959,14 +959,233 @@ _CHECKS: list[tuple[str, Any]] = [
 ]
 
 
-def run_all_checks(pages: list[Page], filter_type: str | None = None) -> list[Issue]:
-    """Run every registered check. If filter_type is set, run only that one."""
+# ────────────────────────────────────────────────────────────────────────
+# Layer 1.5: embedding-based checks (--approx mode)
+# ────────────────────────────────────────────────────────────────────────
+#
+# These checks need a pre-computed embedding index (run bin/embed.py first).
+# They don't call the embedder themselves — pure consumers of stored vectors.
+# Surfacing semantic relationships between pages that pure structural checks
+# miss.
+# ────────────────────────────────────────────────────────────────────────
+
+
+_RAW_LINK_RE = re.compile(r"\[\[raw/(.+?)\]\]")
+
+
+def _wikilink_to_raw_key(link: str) -> str | None:
+    """Convert a [[raw/X]] wikilink to the key used in raw embedding index.
+
+    raw embed index keys are POSIX-relative paths from raw/, e.g. "RLHF.md".
+
+    [[raw/RLHF]]            -> "RLHF.md"
+    [[raw/articles/foo]]    -> "articles/foo.md"
+    [[raw/paper.docx.md]]   -> "paper.docx.md"  (compound — keep as-is)
+    """
+    m = _RAW_LINK_RE.fullmatch(link.strip())
+    if not m:
+        return None
+    inner = m.group(1)
+    return inner if inner.endswith(".md") else inner + ".md"
+
+
+def _mean_std(values: list[float]) -> tuple[float, float]:
+    n = len(values)
+    if n == 0:
+        return 0.0, 0.0
+    import math
+    mean = sum(values) / n
+    var = sum((v - mean) ** 2 for v in values) / n
+    return mean, math.sqrt(var)
+
+
+# Sanity floors for embedding checks. Without these, when similarities are
+# all clustered around zero (sparse/orthogonal vectors, or empty corpus),
+# the adaptive percentile threshold collapses to 0 and the check fires on
+# every pair. The floor keeps "absolutely too dissimilar" pairs out
+# regardless of distribution shape.
+_MIN_SIMILARITY_FLOOR = 0.6     # cosine below this is never "similar"
+_MIN_DRIFT_FLOOR = 0.1          # drift below this is never an outlier
+
+
+def check_similar_but_unlinked(
+    pages: list[Page],
+    wiki_idx: Any,
+    threshold_percentile: float = 95.0,
+    min_similarity: float = _MIN_SIMILARITY_FLOOR,
+) -> Iterable[Issue]:
+    """Pairs of pages with high cosine similarity but no wikilink between them.
+
+    Surfaces missing connections in the knowledge graph. Threshold is
+    adaptive: top X% of all pairwise similarities. A floor (min_similarity)
+    prevents false positives when the corpus has near-zero similarity
+    everywhere (the adaptive threshold would collapse to 0 otherwise).
+
+    Skips pairs where the embedding exists but the page no longer does
+    (stale index — should be re-run after `bin/embed.py update`).
+    """
+    # Local import to avoid hard dependency when --approx isn't used
+    from embed import cosine, percentile
+
+    if not wiki_idx.items:
+        return
+
+    sims = wiki_idx.all_pairwise_similarities()
+    if not sims:
+        return
+
+    threshold = max(percentile(sims, threshold_percentile), min_similarity)
+    by_name = {p.name: p for p in pages}
+
+    # Build link graph (existing wikilinks in body + frontmatter related/domain)
+    outbound, _ = _build_link_graph(pages)
+
+    names = list(wiki_idx.items.keys())
+    seen: set[tuple[str, str]] = set()
+    for i in range(len(names)):
+        a = names[i]
+        if a not in by_name:
+            continue
+        for j in range(i + 1, len(names)):
+            b = names[j]
+            if b not in by_name:
+                continue
+            sim = cosine(wiki_idx.items[a].vec, wiki_idx.items[b].vec)
+            if sim <= threshold:
+                continue
+            # Already linked in either direction → not a missing link
+            if b in outbound.get(a, set()) or a in outbound.get(b, set()):
+                continue
+            key = (a, b) if a < b else (b, a)
+            if key in seen:
+                continue
+            seen.add(key)
+            yield Issue("similar-but-unlinked", {
+                "page_a": by_name[a].relpath(),
+                "page_b": by_name[b].relpath(),
+                "similarity": round(sim, 3),
+                "threshold": round(threshold, 3),
+            })
+
+
+def check_synthesis_drift(
+    pages: list[Page],
+    wiki_idx: Any,
+    raw_idx: Any,
+    std_multiplier: float = 1.5,
+    min_drift: float = _MIN_DRIFT_FLOOR,
+) -> Iterable[Issue]:
+    """Wiki pages whose embedding has drifted from the centroid of their sources.
+
+    Detects synthesis that wandered too far from the source material —
+    a heuristic for hallucination or excessive interpretation during ingest.
+
+    Threshold is adaptive: mean drift + std_multiplier × std deviation.
+    A floor (min_drift) keeps zero-variance distributions from triggering
+    false positives — when all syntheses are equally tight, nothing should
+    fire. Returns early if std == 0 (no outliers to find).
+    """
+    from embed import cosine, vec_mean
+
+    if not wiki_idx.items or not raw_idx.items:
+        return
+
+    drifts: list[float] = []
+    candidates: list[tuple[Page, float]] = []
+
+    for p in pages:
+        if p.fm is None:
+            continue
+        sources = p.fm.fields.get("sources")
+        if not isinstance(sources, list) or not sources:
+            continue
+        keys: list[str] = []
+        for src in sources:
+            if not isinstance(src, str):
+                continue
+            k = _wikilink_to_raw_key(src)
+            if k is not None:
+                keys.append(k)
+        source_vecs = [v for v in (raw_idx.get(k) for k in keys) if v is not None]
+        if not source_vecs:
+            continue
+        page_vec = wiki_idx.get(p.name)
+        if page_vec is None:
+            continue
+        centroid = vec_mean(source_vecs)
+        drift = 1.0 - cosine(page_vec, centroid)
+        drifts.append(drift)
+        candidates.append((p, drift))
+
+    if not drifts:
+        return
+
+    mean, std = _mean_std(drifts)
+    if std == 0:
+        return  # no variance → no statistical outliers
+    threshold = max(mean + std_multiplier * std, min_drift)
+
+    for p, drift in candidates:
+        if drift <= threshold:
+            continue
+        yield Issue("synthesis-drift", {
+            "where": p.relpath(),
+            "drift": round(drift, 3),
+            "threshold": round(threshold, 3),
+        })
+
+
+def run_all_checks(
+    pages: list[Page],
+    filter_type: str | None = None,
+    extra_checks: list[tuple[str, Any]] | None = None,
+) -> list[Issue]:
+    """Run every registered check. If filter_type is set, run only that one.
+
+    extra_checks are appended after the core registry — used by --approx
+    to inject embedding-based checks that need extra arguments (bound via
+    closures).
+    """
     issues: list[Issue] = []
-    for type_name, check_fn in _CHECKS:
+    all_checks = _CHECKS + (extra_checks or [])
+    for type_name, check_fn in all_checks:
         if filter_type and type_name != filter_type:
             continue
         issues.extend(check_fn(pages))
     return issues
+
+
+def _make_approx_checks(
+    threshold_percentile: float,
+    std_multiplier: float,
+) -> list[tuple[str, Any]]:
+    """Load embedding indexes and return bound checks. Empty list if
+    embeddings unavailable — caller handles graceful degradation."""
+    from embed import EmbedIndex, RAW_EMBED_PATH, WIKI_EMBED_PATH
+
+    wiki_idx = EmbedIndex(WIKI_EMBED_PATH)
+    wiki_idx.load()
+    raw_idx = EmbedIndex(RAW_EMBED_PATH)
+    raw_idx.load()
+
+    if not wiki_idx.items:
+        print(
+            f"warning: --approx requested but {WIKI_EMBED_PATH} is empty",
+            file=sys.stderr,
+        )
+        print("  hint: run 'python3 bin/embed.py update' first", file=sys.stderr)
+        return []
+
+    def _similar(pages: list[Page]) -> Iterable[Issue]:
+        return check_similar_but_unlinked(pages, wiki_idx, threshold_percentile)
+
+    def _drift(pages: list[Page]) -> Iterable[Issue]:
+        return check_synthesis_drift(pages, wiki_idx, raw_idx, std_multiplier)
+
+    return [
+        ("similar-but-unlinked", _similar),
+        ("synthesis-drift", _drift),
+    ]
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -979,6 +1198,24 @@ def main() -> int:
     ap.add_argument("--force", action="store_true", help="bypass aggregate-hash skip-check")
     ap.add_argument("--json", action="store_true", help="print full open_issues JSON to stdout")
     ap.add_argument("--check", type=str, default=None, help="run only one check by type")
+    ap.add_argument(
+        "--approx",
+        action="store_true",
+        help="enable embedding-based checks (similar-but-unlinked, synthesis-drift). "
+             "Requires bin/embed.py update to have been run.",
+    )
+    ap.add_argument(
+        "--similarity-percentile",
+        type=float,
+        default=95.0,
+        help="for similar-but-unlinked: pairs above this percentile of pairwise similarities (default: 95)",
+    )
+    ap.add_argument(
+        "--drift-std",
+        type=float,
+        default=1.5,
+        help="for synthesis-drift: std multiplier above mean drift (default: 1.5)",
+    )
     args = ap.parse_args()
 
     pages = discover_pages()
@@ -995,7 +1232,14 @@ def main() -> int:
             print(f"wiki unchanged since last audit ({state.get('last_audit')}). clean. skipping.")
             return 0
 
-    issues = run_all_checks(pages, filter_type=args.check)
+    extra_checks: list[tuple[str, Any]] = []
+    if args.approx:
+        try:
+            extra_checks = _make_approx_checks(args.similarity_percentile, args.drift_std)
+        except ImportError as e:
+            print(f"warning: --approx unavailable ({e})", file=sys.stderr)
+
+    issues = run_all_checks(pages, filter_type=args.check, extra_checks=extra_checks)
 
     new_state = {
         "wiki_hash": wiki_hash,
