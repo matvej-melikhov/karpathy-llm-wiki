@@ -1035,7 +1035,13 @@ def check_similar_but_unlinked(
         return
 
     threshold = max(percentile(sims, threshold_percentile), min_similarity)
-    by_name = {p.name: p for p in pages}
+
+    # Exclude meta pages and wiki root files (infrastructure, not content).
+    # Same rule as check_orphan — these aren't part of the knowledge graph.
+    def _is_content(p: Page) -> bool:
+        return p.page_type != "meta" and p.folder != "" and p.folder != "meta"
+
+    by_name = {p.name: p for p in pages if _is_content(p)}
 
     # Build link graph (existing wikilinks in body + frontmatter related/domain)
     outbound, _ = _build_link_graph(pages)

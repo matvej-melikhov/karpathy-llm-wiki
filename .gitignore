@@ -1,3 +1,7 @@
+# Secrets — API keys, tokens
+.env
+.env.local
+
 # macOS
 .DS_Store
 
