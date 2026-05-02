@@ -5,18 +5,24 @@ Generates and stores text embeddings for wiki pages and raw sources.
 Used by lint (Layer 1.5) for missing-links and synthesis-drift checks.
 
 Architecture:
-    Embedder        — abstract base
-    OllamaEmbedder  — concrete provider via Ollama HTTP API (urllib, no deps)
-    EmbedIndex      — manages a JSON file: {name: {hash, vec}}
-    update_index()  — re-embed only changed pages, prune stale
+    Embedder         — abstract base
+    OllamaEmbedder   — Ollama native HTTP API (urllib, no deps)
+    OpenAIEmbedder   — OpenAI-compatible (LMStudio, llama.cpp, vLLM, OpenAI)
+    EmbedIndex       — manages a JSON file: {name: {hash, vec}}
+    update_index()   — re-embed only changed pages, prune stale
 
 Storage:
     wiki/meta/embeddings.json  — wiki page embeddings (key: page name)
     raw/meta/embeddings.json   — raw source embeddings (key: relpath from raw/)
 
 Configuration via env:
-    EMBED_HOST   default: http://localhost:11434
-    EMBED_MODEL  default: frida
+    EMBED_PROVIDER  ollama (default) | openai
+    EMBED_HOST      default per provider:
+                      ollama → http://localhost:11434
+                      openai → http://localhost:1234/v1  (LMStudio)
+    EMBED_MODEL     default: frida
+    EMBED_API_KEY   only needed for OpenAI proper (not for LMStudio)
+    EMBED_TIMEOUT   default: 60 seconds
 
 CLI:
     python3 bin/embed.py update                # (re)compute embeddings
@@ -55,9 +61,22 @@ RAW_ROOT = Path("raw")
 WIKI_EMBED_PATH = WIKI_ROOT / "meta" / "embeddings.json"
 RAW_EMBED_PATH = RAW_ROOT / "meta" / "embeddings.json"
 
-DEFAULT_HOST = os.environ.get("EMBED_HOST", "http://localhost:11434")
+# Provider selection — "ollama" (native API) or "openai" (OpenAI-compatible:
+# LMStudio, llama.cpp server, vLLM, OpenAI itself).
+DEFAULT_PROVIDER = os.environ.get("EMBED_PROVIDER", "ollama")
 DEFAULT_MODEL = os.environ.get("EMBED_MODEL", "frida")
 DEFAULT_TIMEOUT = float(os.environ.get("EMBED_TIMEOUT", "60"))
+DEFAULT_API_KEY = os.environ.get("EMBED_API_KEY")  # required only for OpenAI itself
+
+# Per-provider default host. Override with EMBED_HOST.
+_PROVIDER_DEFAULT_HOSTS = {
+    "ollama": "http://localhost:11434",
+    "openai": "http://localhost:1234/v1",  # LMStudio default
+}
+DEFAULT_HOST = os.environ.get(
+    "EMBED_HOST",
+    _PROVIDER_DEFAULT_HOSTS.get(DEFAULT_PROVIDER, "http://localhost:11434"),
+)
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -147,6 +166,61 @@ class OllamaEmbedder(Embedder):
         if "embedding" not in data:
             raise EmbedderError(f"legacy response missing 'embedding': {list(data)}")
         return list(data["embedding"])
+
+
+class OpenAIEmbedder(Embedder):
+    """OpenAI-compatible embedding API client.
+
+    Works with any server that implements the OpenAI embeddings endpoint:
+    - LMStudio:        http://localhost:1234/v1
+    - llama.cpp server http://localhost:8080/v1
+    - vLLM:            http://localhost:8000/v1
+    - OpenAI proper:   https://api.openai.com/v1 (requires api_key)
+
+    The host should include the /v1 prefix — endpoint is appended as
+    /embeddings.
+    """
+
+    def __init__(
+        self,
+        host: str = "http://localhost:1234/v1",
+        model: str = DEFAULT_MODEL,
+        api_key: str | None = None,
+        timeout: float = DEFAULT_TIMEOUT,
+    ):
+        self.host = host.rstrip("/")
+        self.model = model
+        self.api_key = api_key
+        self.timeout = timeout
+
+    def embed(self, text: str) -> list[float]:
+        body = json.dumps({"model": self.model, "input": text}).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        req = urllib.request.Request(
+            f"{self.host}/embeddings",
+            data=body,
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            raise EmbedderError(f"HTTP {e.code}: {e.reason}") from e
+        except urllib.error.URLError as e:
+            raise EmbedderUnavailable(str(e.reason)) from e
+        except (ConnectionError, TimeoutError, OSError) as e:
+            raise EmbedderUnavailable(str(e)) from e
+
+        # OpenAI shape: {"data": [{"embedding": [...], "index": 0}, ...], ...}
+        items = data.get("data")
+        if isinstance(items, list) and items:
+            first = items[0]
+            if isinstance(first, dict) and "embedding" in first:
+                return list(first["embedding"])
+        raise EmbedderError(f"unexpected response shape: {list(data)}")
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -398,8 +472,20 @@ def update_index(
 # ────────────────────────────────────────────────────────────────────────
 
 
-def _make_default_embedder() -> OllamaEmbedder:
-    return OllamaEmbedder(host=DEFAULT_HOST, model=DEFAULT_MODEL)
+def _make_default_embedder() -> Embedder:
+    """Build embedder from EMBED_PROVIDER env var (ollama | openai)."""
+    if DEFAULT_PROVIDER == "ollama":
+        return OllamaEmbedder(host=DEFAULT_HOST, model=DEFAULT_MODEL)
+    if DEFAULT_PROVIDER == "openai":
+        return OpenAIEmbedder(
+            host=DEFAULT_HOST,
+            model=DEFAULT_MODEL,
+            api_key=DEFAULT_API_KEY,
+        )
+    raise ValueError(
+        f"unknown EMBED_PROVIDER={DEFAULT_PROVIDER!r}. "
+        f"Expected one of: ollama, openai"
+    )
 
 
 def cmd_update(_args) -> int:

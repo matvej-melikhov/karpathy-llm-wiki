@@ -24,7 +24,7 @@ Lint работает в два слоя плюс опциональный embed
 
 **Layer 1 — программная проверка (`bin/lint.py`).** Python-скрипт, реализующий все детерминистические проверки: 16 типов issues. Запускается за секунды, без LLM-стоимости. Пишет `lint-state.json` с найденными `open_issues`.
 
-**Layer 1.5 — embedding-based (опционально, `--approx`).** Те же `bin/lint.py`, но с флагом `--approx` подключаются проверки на основе предварительно посчитанных эмбеддингов: `similar-but-unlinked` (semantic missing links) и `synthesis-drift` (детектор отклонения синтеза от источников). Чистые потребители векторов — Ollama не нужна для lint, только `bin/embed.py update` должен быть выполнен заранее.
+**Layer 1.5 — embedding-based (опционально, `--approx`).** Те же `bin/lint.py`, но с флагом `--approx` подключаются проверки на основе предварительно посчитанных эмбеддингов: `similar-but-unlinked` (semantic missing links) и `synthesis-drift` (детектор отклонения синтеза от источников). Чистые потребители векторов — embedding-сервер (Ollama или LMStudio через OpenAI-совместимый API) не нужен для lint, только `bin/embed.py update` должен быть выполнен заранее.
 
 **Layer 2 — LLM-семантическая проверка.** Этот скилл (lint) запускается после `bin/lint.py`, читает уже записанный state, дополняет `open_issues` семантическими проверками: `contradiction`, `outdated-claim`, `missing-concept`, `style-nit`. Это требует языкового суждения, программно не делается.
 
