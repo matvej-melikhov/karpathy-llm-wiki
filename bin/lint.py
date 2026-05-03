@@ -1141,6 +1141,76 @@ def check_synthesis_drift(
         })
 
 
+def compute_contradiction_candidates(
+    pages: list[Page],
+    wiki_idx: Any,
+    threshold_percentile: float = 75.0,
+    min_similarity: float = 0.5,
+) -> list[dict[str, Any]]:
+    """Top-similarity page pairs as candidates for Layer 2 contradiction check.
+
+    The LLM-driven `contradiction` check in the lint skill (Layer 2) would
+    otherwise need to inspect all O(n²) pairs of wiki pages — for 55 pages
+    that's 1485 pairs. Pre-filtering by embedding similarity narrows the
+    work to pairs that are at least topically related.
+
+    Threshold:
+    - Adaptive: top X% of pairwise similarities (default 75th percentile —
+      i.e. top 25% of pairs).
+    - Floor: 0.5 — slightly looser than similar-but-unlinked (0.6) since
+      contradictions can exist between pages that are similar-on-topic but
+      not nearly identical.
+
+    Excludes meta pages (cache/log/summary/dashboards) — same rule as
+    check_similar_but_unlinked.
+
+    Returns list of {"page_a", "page_b", "similarity"} dicts sorted by
+    similarity descending. Layer 2 reads them from lint-state.json.
+    """
+    from embed import cosine, percentile
+
+    if not wiki_idx.items:
+        return []
+
+    sims = wiki_idx.all_pairwise_similarities()
+    if not sims:
+        return []
+
+    threshold = max(percentile(sims, threshold_percentile), min_similarity)
+
+    def _is_content(p: Page) -> bool:
+        return p.page_type != "meta" and p.folder != "" and p.folder != "meta"
+
+    by_name = {p.name: p for p in pages if _is_content(p)}
+
+    names = list(wiki_idx.items.keys())
+    candidates: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for i in range(len(names)):
+        a = names[i]
+        if a not in by_name:
+            continue
+        for j in range(i + 1, len(names)):
+            b = names[j]
+            if b not in by_name:
+                continue
+            sim = cosine(wiki_idx.items[a].vec, wiki_idx.items[b].vec)
+            if sim <= threshold:
+                continue
+            key = (a, b) if a < b else (b, a)
+            if key in seen:
+                continue
+            seen.add(key)
+            candidates.append({
+                "page_a": by_name[a].relpath(),
+                "page_b": by_name[b].relpath(),
+                "similarity": round(sim, 3),
+            })
+
+    candidates.sort(key=lambda c: c["similarity"], reverse=True)
+    return candidates
+
+
 def run_all_checks(
     pages: list[Page],
     filter_type: str | None = None,
@@ -1161,12 +1231,9 @@ def run_all_checks(
     return issues
 
 
-def _make_approx_checks(
-    threshold_percentile: float,
-    std_multiplier: float,
-) -> list[tuple[str, Any]]:
-    """Load embedding indexes and return bound checks. Empty list if
-    embeddings unavailable — caller handles graceful degradation."""
+def _load_embedding_indexes() -> tuple[Any, Any] | None:
+    """Load wiki and raw embedding indexes. Returns None if wiki is empty
+    (graceful degradation signal)."""
     from embed import EmbedIndex, RAW_EMBED_PATH, WIKI_EMBED_PATH
 
     wiki_idx = EmbedIndex(WIKI_EMBED_PATH)
@@ -1180,7 +1247,18 @@ def _make_approx_checks(
             file=sys.stderr,
         )
         print("  hint: run 'python3 bin/embed.py update' first", file=sys.stderr)
-        return []
+        return None
+    return wiki_idx, raw_idx
+
+
+def _make_approx_checks(
+    wiki_idx: Any,
+    raw_idx: Any,
+    threshold_percentile: float,
+    std_multiplier: float,
+) -> list[tuple[str, Any]]:
+    """Bind loaded indexes into closures matching the (pages) -> Iterable[Issue]
+    signature expected by the check registry."""
 
     def _similar(pages: list[Page]) -> Iterable[Issue]:
         return check_similar_but_unlinked(pages, wiki_idx, threshold_percentile)
@@ -1222,6 +1300,13 @@ def main() -> int:
         default=1.5,
         help="for synthesis-drift: std multiplier above mean drift (default: 1.5)",
     )
+    ap.add_argument(
+        "--candidate-percentile",
+        type=float,
+        default=75.0,
+        help="for Layer 2 contradiction pre-filter: pairs above this percentile "
+             "of pairwise similarities go into contradiction_candidates (default: 75)",
+    )
     args = ap.parse_args()
 
     pages = discover_pages()
@@ -1239,20 +1324,34 @@ def main() -> int:
             return 0
 
     extra_checks: list[tuple[str, Any]] = []
+    contradiction_candidates: list[dict[str, Any]] = []
     if args.approx:
         try:
-            extra_checks = _make_approx_checks(args.similarity_percentile, args.drift_std)
+            indexes = _load_embedding_indexes()
         except ImportError as e:
             print(f"warning: --approx unavailable ({e})", file=sys.stderr)
+            indexes = None
+        if indexes is not None:
+            wiki_idx, raw_idx = indexes
+            extra_checks = _make_approx_checks(
+                wiki_idx, raw_idx,
+                args.similarity_percentile, args.drift_std,
+            )
+            contradiction_candidates = compute_contradiction_candidates(
+                pages, wiki_idx,
+                threshold_percentile=args.candidate_percentile,
+            )
 
     issues = run_all_checks(pages, filter_type=args.check, extra_checks=extra_checks)
 
-    new_state = {
+    new_state: dict[str, Any] = {
         "wiki_hash": wiki_hash,
         "last_audit": dt.datetime.now().isoformat(timespec="seconds"),
         "files_checked": len(pages),
         "open_issues": [iss.to_dict() for iss in issues],
     }
+    if contradiction_candidates:
+        new_state["contradiction_candidates"] = contradiction_candidates
     save_lint_state(new_state)
 
     print(f"checked {len(pages)} pages, found {len(issues)} open issues")

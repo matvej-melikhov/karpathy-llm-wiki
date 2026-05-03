@@ -26,6 +26,8 @@ Lint работает в два слоя плюс опциональный embed
 
 **Layer 1.5 — embedding-based (опционально, `--approx`).** Те же `bin/lint.py`, но с флагом `--approx` подключаются проверки на основе предварительно посчитанных эмбеддингов: `similar-but-unlinked` (semantic missing links) и `synthesis-drift` (детектор отклонения синтеза от источников). Чистые потребители векторов — embedding-сервер (Ollama или LMStudio через OpenAI-совместимый API) не нужен для lint, только `bin/embed.py update` должен быть выполнен заранее.
 
+Кроме issues, при `--approx` Layer 1.5 пишет в `lint-state.json` отдельное поле `contradiction_candidates` — список пар страниц с высоким cosine, для которых **Layer 2** должен запускать LLM-проверку на противоречия. Это сужает работу Layer 2 с O(n²) до top X% пар (~5-6× редукция при дефолтном `--candidate-percentile 75`).
+
 **Layer 2 — LLM-семантическая проверка.** Этот скилл (lint) запускается после `bin/lint.py`, читает уже записанный state, дополняет `open_issues` семантическими проверками: `contradiction`, `outdated-claim`, `missing-concept`, `style-nit`. Это требует языкового суждения, программно не делается.
 
 Полный поток `/lint`:
@@ -118,6 +120,47 @@ Skip-check выполняется в Layer 1 (`bin/lint.py`). Если wiki не
 1. Записать `wiki/meta/lint-state.json` с актуальным `wiki_hash`, `last_audit`, `files_checked`, новым списком `open_issues`.
 2. Вывести пользователю краткую сводку + список issues.
 3. Предложить: "Применить безопасные правки и пройтись по требующим решения через `/ingest --fix`?"
+
+---
+
+## Layer 2: contradiction-check (LLM)
+
+Layer 2 запускается **этим скиллом** после `bin/lint.py` отработал. Задача — найти семантические нарушения, которые программно не поймать: `contradiction`, `outdated-claim`, `missing-concept`.
+
+### Contradiction check — стратегия зависит от наличия `contradiction_candidates`
+
+**Если в `lint-state.json` есть поле `contradiction_candidates`** (запустили с `--approx`):
+
+```json
+{
+  "contradiction_candidates": [
+    {"page_a": "wiki/ideas/A.md", "page_b": "wiki/ideas/B.md", "similarity": 0.87},
+    {"page_a": "...", "page_b": "...", "similarity": 0.84},
+    ...
+  ]
+}
+```
+
+Это уже отфильтрованный embedding-pre-filter список пар, которые семантически близки и потенциально могут содержать противоречия. Проходим **только по этим парам**, не по всему O(n²).
+
+Поведение:
+1. Прочитать список candidates (отсортирован по similarity descending — самые похожие сверху)
+2. Для каждой пары прочитать обе страницы, сравнить ключевые утверждения
+3. Если найдено противоречие — добавить в `open_issues`:
+   ```json
+   {"type": "contradiction", "page_a": "...", "page_b": "...", "claim": "<краткое описание противоречия>"}
+   ```
+4. Если противоречий нет — ничего не делать (не флагуем «проверено и чисто»)
+
+**Если поля `contradiction_candidates` нет** (запустили без `--approx`):
+
+Классический полный обход. Перебрать все content-страницы попарно (O(n²)) и проверить на противоречия. Дорого по токенам — для wiki >50 страниц рекомендуем включать `--approx` чтобы пользоваться pre-filter.
+
+### Outdated-claim и missing-concept
+
+Эти проверки идут **по всему content** wiki независимо от `--approx`:
+- `outdated-claim` — найти утверждения в страницах, опровергнутые более новыми источниками
+- `missing-concept` — концепции, которые упоминаются в ≥3 страницах, но не имеют своей wiki-страницы
 
 ---
 
