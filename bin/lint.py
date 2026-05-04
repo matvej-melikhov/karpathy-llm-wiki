@@ -238,8 +238,11 @@ def discover_pages() -> list[Page]:
         return pages
 
     for md in sorted(WIKI_ROOT.rglob("*.md")):
-        # skip lint reports
-        if md.parent.name == "meta" and md.name.startswith("lint-report-"):
+        # skip auto-generated meta artifacts (lint reports, knowledge maps)
+        if md.parent.name == "meta" and (
+            md.name.startswith("lint-report-")
+            or md.name.startswith("knowledge-map-")
+        ):
             continue
         # determine folder
         rel = md.relative_to(WIKI_ROOT)

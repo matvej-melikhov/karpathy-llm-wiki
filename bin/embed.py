@@ -407,7 +407,10 @@ def discover_wiki_pages() -> list[tuple[str, str]]:
     if not WIKI_ROOT.is_dir():
         return pages
     for md in sorted(WIKI_ROOT.rglob("*.md")):
-        if md.parent.name == "meta" and md.name.startswith("lint-report-"):
+        if md.parent.name == "meta" and (
+            md.name.startswith("lint-report-")
+            or md.name.startswith("knowledge-map-")
+        ):
             continue
         pages.append((md.stem, md.read_text(encoding="utf-8")))
     return pages
@@ -508,7 +511,10 @@ def wiki_page_paths() -> dict[str, tuple[str, str]]:
     if not WIKI_ROOT.is_dir():
         return result
     for md in sorted(WIKI_ROOT.rglob("*.md")):
-        if md.parent.name == "meta" and md.name.startswith("lint-report-"):
+        if md.parent.name == "meta" and (
+            md.name.startswith("lint-report-")
+            or md.name.startswith("knowledge-map-")
+        ):
             continue
         rel = md.relative_to(WIKI_ROOT)
         folder = rel.parts[0] if len(rel.parts) > 1 else ""
