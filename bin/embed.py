@@ -422,6 +422,25 @@ _INDEX_WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:\|[^\]]*)?\]\]")
 _PIPE_PLACEHOLDER = "__ESCAPED_PIPE__"
 
 
+def _normalize_wiki_target(target: str) -> str:
+    """Strip path prefix from wiki wikilink target → basename.
+
+    Mirrors the same helper in lint.py. Filenames are unique by basename
+    across the entire vault (per schema), so wikilinks should be
+    `[[RLHF]]` not `[[wiki/ideas/RLHF]]`. Both forms render in Obsidian,
+    but our index→summary lookup keys by basename. Without this, queries
+    against pages whose index entry uses path-prefixed form would have
+    empty summary in the output.
+
+    raw/ targets are NOT normalized (they have legitimate folder structure).
+    """
+    if target.startswith("raw/"):
+        return target
+    if "/" in target:
+        return target.rsplit("/", 1)[-1]
+    return target
+
+
 def parse_index_summaries(index_path: Path | None = None) -> dict[str, str]:
     """Parse wiki/index.md → {page_name: summary}.
 
@@ -471,7 +490,7 @@ def parse_index_summaries(index_path: Path | None = None) -> dict[str, str]:
         link_match = _INDEX_WIKILINK_RE.search(cells[0])
         if not link_match:
             continue
-        name = link_match.group(1).strip()
+        name = _normalize_wiki_target(link_match.group(1).strip())
         summary = cells[1].strip()
         if name and summary:
             summaries[name] = summary

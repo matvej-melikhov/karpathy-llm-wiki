@@ -184,6 +184,7 @@ Layer 2 запускается **этим скиллом** после `bin/lint.
 | `empty-sources-section` | секция `## Источники`/`## Источники упоминания` содержит только `[[raw/...]]` | `{type, where, section}` |
 | `folder-type-mismatch` | страница лежит в `wiki/<X>/`, но `type:` во frontmatter не соответствует папке | `{type, where, current_type, expected_type}` |
 | `stale-index-entry` | строка в `wiki/index.md` ссылается на несуществующую страницу (была удалена/переименована) | `{type, link, section}` |
+| `non-canonical-wikilink` | wikilink использует path-prefixed форму (`[[wiki/ideas/RLHF]]`, `[[ideas/RLHF]]`) вместо канонической basename `[[RLHF]]`. raw/-ссылки не флагируются. Auto-fix сохраняет `#section\|alias` части | `{type, where, link, fix, context}` |
 
 ### Ask user (ingest спрашивает решение)
 
@@ -237,6 +238,7 @@ Layer 2 запускается **этим скиллом** после `bin/lint.
 | 13.4 | `domain:` ссылается на несуществующую domain-страницу | ask |
 | 13.5 | Асимметричные `related:` (A→B без B→A) | ask |
 | 13.6 | Бинарный источник вне `raw/formats/` | ask |
+| 13.7 | Path-prefixed wikilinks (`[[wiki/X/Y]]` вместо `[[Y]]`) | auto-fix |
 | 14 | Пустые секции | skip |
 | 15 | Стилистические нарушения | skip |
 | 16 | `similar-but-unlinked` (только `--approx`) | ask |

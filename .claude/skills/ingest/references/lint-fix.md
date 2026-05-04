@@ -75,6 +75,7 @@
 | `empty-sources-section` | удалить секцию целиком вместе с заголовком |
 | `folder-type-mismatch` | переписать `type:` во frontmatter в значение `expected_type` (берётся из имени папки: `ideas`→`idea`, `entities`→`entity`, `questions`→`question`, `domains`→`domain`) |
 | `stale-index-entry` | удалить строку из `wiki/index.md` (секция определяется по `section` в issue: Ideas / Entities / Questions / Domains) |
+| `non-canonical-wikilink` | заменить `link` на `fix` в файле `where`. Локация уточняется через `context` (`line N` для тела, `frontmatter related/domain` для frontmatter, `index section X` для index.md). Используй точечный Edit с `link` как старая строка и `fix` как новая |
 
 После каждой правки удалить соответствующий issue из `open_issues`.
 

@@ -534,10 +534,41 @@ def _normalize_wikilink_text(text: str) -> str:
     return cleaned
 
 
+def _normalize_wiki_target(target: str) -> str:
+    """Strip path prefix from wiki wikilink target → basename.
+
+    Per schema: filenames are unique by basename across the entire vault,
+    so wikilinks should use just the stem (`[[RLHF]]`, not `[[wiki/ideas/RLHF]]`).
+    Obsidian renders both forms identically, but consistency matters for
+    lint and for our embedding-summary lookup.
+
+    Special case: `raw/...` references DO use path structure (raw/articles/foo,
+    raw/formats/...) and must not be normalized — they're not wiki pages.
+
+    Examples:
+        [[RLHF]]              → "RLHF"
+        [[wiki/ideas/RLHF]]   → "RLHF"
+        [[ideas/RLHF]]        → "RLHF"
+        [[raw/articles/foo]]  → "raw/articles/foo"  (unchanged)
+    """
+    if target.startswith("raw/"):
+        return target
+    if "/" in target:
+        return target.rsplit("/", 1)[-1]
+    return target
+
+
 def _extract_wikilinks(text: str) -> list[str]:
-    """Return target names of all wikilinks in text."""
+    """Return basename targets of all wikilinks in text.
+
+    Path-prefixed wiki wikilinks (e.g., [[wiki/ideas/RLHF]]) are normalized
+    to basename ("RLHF"). raw/-prefixed targets are preserved as-is.
+    """
     cleaned = _normalize_wikilink_text(text)
-    return [m.group(1).strip() for m in _WIKILINK_RE.finditer(cleaned)]
+    return [
+        _normalize_wiki_target(m.group(1).strip())
+        for m in _WIKILINK_RE.finditer(cleaned)
+    ]
 
 
 def _build_link_graph(pages: list[Page]) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
@@ -607,7 +638,7 @@ def check_dead_link(pages: list[Page]) -> Iterable[Issue]:
             # Normalize: strip inline code, replace escaped pipes
             line = re.sub(r"`[^`\n]*`", "", raw_line).replace(r"\|", "|")
             for m in _WIKILINK_RE.finditer(line):
-                target = m.group(1).strip()
+                target = _normalize_wiki_target(m.group(1).strip())
                 if target.startswith("raw/"):
                     continue
                 if target in by_name:
@@ -679,7 +710,7 @@ def check_asymmetric_related(pages: list[Page]) -> Iterable[Issue]:
             if not isinstance(v, str):
                 continue
             for m in _WIKILINK_RE.finditer(v):
-                t = m.group(1).strip()
+                t = _normalize_wiki_target(m.group(1).strip())
                 if not t.startswith("raw/"):
                     targets.add(t)
         related_map[p.name] = targets
@@ -755,7 +786,7 @@ def _parse_index_tables(index_text: str) -> dict[str, set[str]]:
             continue
         first_cell = cells[0]
         for m in _WIKILINK_RE.finditer(first_cell):
-            result[current_section].add(m.group(1).strip())
+            result[current_section].add(_normalize_wiki_target(m.group(1).strip()))
     return result
 
 
@@ -911,7 +942,7 @@ def check_dangling_domain_ref(pages: list[Page]) -> Iterable[Issue]:
             if not isinstance(v, str):
                 continue
             for m in _WIKILINK_RE.finditer(v):
-                target = m.group(1).strip()
+                target = _normalize_wiki_target(m.group(1).strip())
                 if target.startswith("raw/"):
                     continue
                 if target not in domain_pages:
@@ -919,6 +950,152 @@ def check_dangling_domain_ref(pages: list[Page]) -> Iterable[Issue]:
                         "where": p.relpath(),
                         "missing_domain": target,
                     })
+
+
+def _build_canonical_fix(original: str, normalized_target: str) -> str:
+    """Build a fix string for non-canonical wikilink that preserves #anchor
+    and |alias parts.
+
+    [[wiki/ideas/RLHF]]                       → [[RLHF]]
+    [[wiki/ideas/RLHF#Section]]               → [[RLHF#Section]]
+    [[wiki/ideas/RLHF|Alias]]                 → [[RLHF|Alias]]
+    [[wiki/ideas/RLHF#Section|Alias]]         → [[RLHF#Section|Alias]]
+    """
+    inner = original[2:-2]  # strip [[ and ]]
+    alias_part = ""
+    if "|" in inner:
+        inner, alias = inner.split("|", 1)
+        alias_part = "|" + alias
+    anchor_part = ""
+    if "#" in inner:
+        inner, anchor = inner.split("#", 1)
+        anchor_part = "#" + anchor
+    return "[[" + normalized_target + anchor_part + alias_part + "]]"
+
+
+def check_non_canonical_wikilink(
+    pages: list[Page],
+    index_path: Path | None = None,
+) -> Iterable[Issue]:
+    """Wikilink uses path-prefixed form (e.g., [[wiki/ideas/RLHF]]) where the
+    canonical form is just the basename ([[RLHF]]).
+
+    Per schema, filenames are unique by basename across the entire vault, so
+    `[[Page]]` resolves correctly without a path. Path-prefixed wikilinks
+    work in Obsidian but break our lint and embedding pipeline (which key by
+    basename) — so we normalize and flag for auto-fix.
+
+    raw/ references are SKIPPED — those legitimately use path structure
+    (raw/articles/foo, raw/formats/...) and aren't normalized.
+
+    Auto-fix: replace `[[X/Y/Page]]` with `[[Page]]` (preserving alias and
+    anchor parts via the `fix` payload).
+
+    Sources scanned:
+    - Page bodies (excluding fenced code and inline code)
+    - frontmatter `related:` and `domain:` fields
+    - wiki/index.md table cells
+
+    Skips meta pages (their content is operations log, not knowledge graph).
+    """
+    seen: set[tuple[str, str]] = set()
+
+    for p in pages:
+        if p.page_type == "meta" or p.folder == "meta":
+            continue
+        if p.fm is None and not p.body:
+            continue
+
+        # Body (with code blocks stripped)
+        if p.body:
+            in_code = False
+            for line_no, raw_line in enumerate(p.body.split("\n"), start=1):
+                stripped = raw_line.lstrip()
+                if stripped.startswith("```"):
+                    in_code = not in_code
+                    continue
+                if in_code:
+                    continue
+                line = re.sub(r"`[^`\n]*`", "", raw_line).replace(r"\|", "|")
+                for m in _WIKILINK_RE.finditer(line):
+                    raw_target = m.group(1).strip()
+                    if raw_target.startswith("raw/"):
+                        continue
+                    if "/" not in raw_target:
+                        continue
+                    fix = _build_canonical_fix(m.group(0), _normalize_wiki_target(raw_target))
+                    key = (p.relpath(), m.group(0))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    yield Issue("non-canonical-wikilink", {
+                        "where": p.relpath(),
+                        "link": m.group(0),
+                        "fix": fix,
+                        "context": f"line {line_no}",
+                    })
+
+        # Frontmatter related / domain
+        if p.fm is None:
+            continue
+        for fld in ("related", "domain"):
+            values = p.fm.fields.get(fld)
+            if not isinstance(values, list):
+                continue
+            for v in values:
+                if not isinstance(v, str):
+                    continue
+                for m in _WIKILINK_RE.finditer(v):
+                    raw_target = m.group(1).strip()
+                    if raw_target.startswith("raw/"):
+                        continue
+                    if "/" not in raw_target:
+                        continue
+                    fix = _build_canonical_fix(m.group(0), _normalize_wiki_target(raw_target))
+                    key = (p.relpath(), m.group(0) + ":" + fld)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    yield Issue("non-canonical-wikilink", {
+                        "where": p.relpath(),
+                        "link": m.group(0),
+                        "fix": fix,
+                        "context": f"frontmatter {fld}",
+                    })
+
+    # wiki/index.md
+    if index_path is None:
+        index_path = WIKI_ROOT / "index.md"
+    if index_path.is_file():
+        _fm, body = parse_frontmatter(index_path.read_text(encoding="utf-8"))
+        current_section: str | None = None
+        for line_no, line in enumerate(body.split("\n"), start=1):
+            h = re.match(r"^##\s+(.+?)\s*$", line)
+            if h:
+                heading = h.group(1).strip()
+                current_section = heading if heading in _INDEX_SECTION_TO_FOLDER else None
+                continue
+            if current_section is None:
+                continue
+            if not line.lstrip().startswith("|"):
+                continue
+            for m in _WIKILINK_RE.finditer(line):
+                raw_target = m.group(1).strip()
+                if raw_target.startswith("raw/"):
+                    continue
+                if "/" not in raw_target:
+                    continue
+                fix = _build_canonical_fix(m.group(0), _normalize_wiki_target(raw_target))
+                key = ("wiki/index.md", m.group(0))
+                if key in seen:
+                    continue
+                seen.add(key)
+                yield Issue("non-canonical-wikilink", {
+                    "where": "wiki/index.md",
+                    "link": m.group(0),
+                    "fix": fix,
+                    "context": f"index section {current_section}",
+                })
 
 
 def check_folder_type_mismatch(pages: list[Page]) -> Iterable[Issue]:
@@ -945,6 +1122,7 @@ _CHECKS: list[tuple[str, Any]] = [
     ("legacy-field", check_legacy_field),
     ("lowercase-tags", check_lowercase_tags),
     ("inline-tags", check_inline_tags),
+    ("non-canonical-wikilink", check_non_canonical_wikilink),
     ("folder-type-mismatch", check_folder_type_mismatch),
     ("raw-link-with-extension", check_raw_link_with_extension),
     ("raw-ref-in-body", check_raw_ref_in_body),
