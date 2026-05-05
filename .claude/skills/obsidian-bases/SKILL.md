@@ -12,6 +12,20 @@ Obsidian Bases (запущен в 2025) превращает заметки vaul
 
 ---
 
+## ⚠️ Критично: только отдельные `.base` файлы
+
+**Markdown code-блоки ` ```base ... ``` ` НЕ рендерятся Obsidian'ом.** Они отображаются как обычный текст в кодовом блоке — пустота на месте таблицы.
+
+Bases работает **только** в виде отдельного файла с расширением `.base` и валидным YAML. Чтобы показать таблицу внутри markdown-заметки, используй embed:
+
+```markdown
+![[MyBase.base]]
+```
+
+Это правило часто нарушается генераторами шаблонов с помощью code-блоков — всегда заменяй на embed.
+
+---
+
 ## Формат файла
 
 `.base` файлы содержат валидный YAML. Корневые ключи: `filters`, `formulas`, `properties`, `summaries`, `views`.
@@ -276,10 +290,39 @@ views:
 
 ## Где сохранять
 
-Храни `.base` файлы в `wiki/meta/` для дашбордов vault:
-- `wiki/meta/dashboard.base` — основной view содержимого
-- `wiki/meta/entities.base` — трекер сущностей
-- `wiki/meta/domains.base` — обзор доменов и их связей
+Все `.base` файлы — в **`wiki/meta/dashboards/`**:
+
+```
+wiki/meta/dashboards/dashboard.base               — основной view содержимого
+wiki/meta/dashboards/entities.base                — трекер сущностей
+wiki/meta/dashboards/domains.base                 — обзор доменов
+wiki/meta/dashboards/Machine Learning.base        — view для domain-страницы
+wiki/meta/dashboards/<DomainTitle>.base           — view для каждого domain-MOC
+```
+
+Имена `.base` файлов **уникальны по vault** — embed работает по basename без указания пути:
+
+```markdown
+<!-- в wiki/domains/Machine Learning.md -->
+![[Machine Learning.base]]
+```
+
+Obsidian резолвит ссылку по уникальному имени и embed находит файл из любой папки.
+
+### Почему именно `wiki/meta/`
+
+- **Обычная папка** — Obsidian её индексирует и embed работает (см. секцию ниже про dot-prefix, который **не** работает).
+- **Отделена от контента** — `meta/` исключается из обычных дашбордов через `not file.inFolder("wiki/meta/")` и не попадает в графы знаний.
+- **Группирует инфраструктуру** — рядом с lint-state, lint-report, dashboard.base.
+
+### ⚠️ Dot-prefix НЕ работает для `.base` файлов
+
+Соблазнительная идея — назвать файл `.X.base`, чтобы Obsidian скрыл его из File Explorer (как `.gitignore`). На практике:
+
+- Obsidian **полностью игнорирует** dot-файлы (как и dot-папки), не индексирует их и не резолвит wikilinks.
+- Embed `![[.X.base]]` показывает «Заметка не существует. Нажмите, чтобы создать.»
+
+Единственный способ скрыть `.base` файлы из основной File Explorer view — держать их в отдельной папке (`wiki/meta/`) и при необходимости свернуть её или скрыть через настройки темы / плагина File Explorer.
 
 ---
 
@@ -293,7 +336,9 @@ views:
 
 ## Чего НЕ делать
 
+- Не пиши Bases-конфиг в markdown code-блоке ` ```base ... ``` ` — **не рендерится**. Только отдельный `.base` файл + embed `![[X.base]]`.
 - Не используй `from:` или `where:`: это синтаксис Dataview, не Bases
 - Не используй `sort:` на root уровне: сортировка per-view через `order:` и `groupBy:`
 - Не клади `.base` файлы вне vault: они рендерятся только внутри Obsidian
 - Не ссылайся на `formula.X` в `order:` без определения `X` в `formulas:`
+- Не клади `.base` файлы в папки или с именами с dot-prefix (`.bases/X.base`, `.X.base`) — Obsidian игнорирует и dot-папки, и dot-файлы полностью; embed не сработает. Для скрытия из File Explorer держи их в обособленной папке `wiki/meta/`.

@@ -3,7 +3,7 @@ name: lint
 description: >
   Read-only ревьюер Obsidian wiki-vault. Находит страницы-сироты, мёртвые wikilinks,
   устаревшие утверждения, отсутствующие перекрёстные ссылки, пробелы во frontmatter,
-  пустые секции, нарушения схемы. Записывает результат в `wiki/meta/lint-state.json`,
+  пустые секции, нарушения схемы. Записывает результат в `wiki/meta/lint-reports/lint-state.json`,
   включая структурированный список `open_issues` для применения ingest. Кэширует
   состояние через aggregate hash, чтобы не перепроверять неизменную wiki.
   Триггеры: /lint, "lint", "проверка здоровья", "очисти wiki",
@@ -14,7 +14,7 @@ description: >
 
 Lint **только читает** wiki и записывает структурированный отчёт. **Никаких правок в content-файлы (`wiki/ideas/`, `wiki/entities/` и т.д.)** — фиксы делает `ingest` по этому отчёту.
 
-Единственный файл, который lint имеет право писать — `wiki/meta/lint-state.json`.
+Единственный файл, который lint имеет право писать — `wiki/meta/lint-reports/lint-state.json`.
 
 ---
 
@@ -71,7 +71,7 @@ Lint работает в два слоя плюс опциональный embed
 
 Skip-check выполняется в Layer 1 (`bin/lint.py`). Если wiki не менялась с последнего audit и нет накопленных open_issues — оба слоя пропускаются.
 
-`wiki/meta/lint-state.json` хранит результат последнего audit:
+`wiki/meta/lint-reports/lint-state.json` хранит результат последнего audit:
 
 ```json
 {
@@ -91,13 +91,14 @@ Skip-check выполняется в Layer 1 (`bin/lint.py`). Если wiki не
 
 **При входе в `/lint`:**
 
-1. Если `wiki/meta/lint-state.json` отсутствует — пропустить skip-check, идти на full audit.
+1. Если `wiki/meta/lint-reports/lint-state.json` отсутствует — пропустить skip-check, идти на full audit.
 2. Прочитать `lint-state.json`, получить `wiki_hash` и `open_issues`.
 3. Посчитать текущий `wiki_hash`:
    ```bash
    find wiki -name '*.md' \
-     -not -path 'wiki/meta/lint-state.json' \
-     -not -path 'wiki/meta/lint-report-*.md' \
+     -not -path 'wiki/meta/lint-reports/*' \
+     -not -path 'wiki/meta/kn-maps/*' \
+     -not -path 'wiki/meta/dashboards/*' \
      | sort | xargs cat | sha256sum | cut -d' ' -f1
    ```
    (Сортировка чтобы порядок не влиял; конкатенация всех тел; один итоговый sha256.)
@@ -117,7 +118,7 @@ Skip-check выполняется в Layer 1 (`bin/lint.py`). Если wiki не
 
 Полный обход wiki, без правок. По завершении:
 
-1. Записать `wiki/meta/lint-state.json` с актуальным `wiki_hash`, `last_audit`, `files_checked`, новым списком `open_issues`.
+1. Записать `wiki/meta/lint-reports/lint-state.json` с актуальным `wiki_hash`, `last_audit`, `files_checked`, новым списком `open_issues`.
 2. Вывести пользователю краткую сводку + список issues.
 3. Предложить: "Применить безопасные правки и пройтись по требующим решения через `/ingest --fix`?"
 

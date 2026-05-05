@@ -42,7 +42,7 @@ from typing import Any, Iterable
 # ────────────────────────────────────────────────────────────────────────
 
 WIKI_ROOT = Path("wiki")
-LINT_STATE_PATH = WIKI_ROOT / "meta" / "lint-state.json"
+LINT_STATE_PATH = WIKI_ROOT / "meta" / "lint-reports" / "lint-state.json"
 
 RAW_ROOT = Path("raw")
 RAW_FORMATS_DIR = RAW_ROOT / "formats"
@@ -238,7 +238,11 @@ def discover_pages() -> list[Page]:
         return pages
 
     for md in sorted(WIKI_ROOT.rglob("*.md")):
-        # skip auto-generated meta artifacts (lint reports, knowledge maps)
+        # Skip auto-generated meta artifacts. Supports both layouts:
+        # - subdir: wiki/meta/lint-reports/, wiki/meta/kn-maps/
+        # - legacy flat: wiki/meta/lint-report-*.md, knowledge-map-*.md
+        if md.parent.name in ("lint-reports", "kn-maps"):
+            continue
         if md.parent.name == "meta" and (
             md.name.startswith("lint-report-")
             or md.name.startswith("knowledge-map-")

@@ -402,11 +402,14 @@ class EmbedIndex:
 
 
 def discover_wiki_pages() -> list[tuple[str, str]]:
-    """Walk wiki/ → list of (basename, full text). Skips lint reports."""
+    """Walk wiki/ → list of (basename, full text). Skips auto-generated meta
+    artifacts (lint reports, knowledge maps) in both subdir and legacy flat layouts."""
     pages: list[tuple[str, str]] = []
     if not WIKI_ROOT.is_dir():
         return pages
     for md in sorted(WIKI_ROOT.rglob("*.md")):
+        if md.parent.name in ("lint-reports", "kn-maps"):
+            continue
         if md.parent.name == "meta" and (
             md.name.startswith("lint-report-")
             or md.name.startswith("knowledge-map-")
@@ -511,6 +514,8 @@ def wiki_page_paths() -> dict[str, tuple[str, str]]:
     if not WIKI_ROOT.is_dir():
         return result
     for md in sorted(WIKI_ROOT.rglob("*.md")):
+        if md.parent.name in ("lint-reports", "kn-maps"):
+            continue
         if md.parent.name == "meta" and (
             md.name.startswith("lint-report-")
             or md.name.startswith("knowledge-map-")

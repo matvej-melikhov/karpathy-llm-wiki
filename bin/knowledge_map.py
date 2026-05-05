@@ -3,9 +3,9 @@
 
 Generates three artifacts on each run:
 
-    _attachments/knowledge-map-YYYY-MM-DD.html   interactive Plotly viz
-    _attachments/knowledge-map-YYYY-MM-DD.png    static export
-    wiki/meta/knowledge-map-YYYY-MM-DD.md        markdown page with stats
+    _attachments/knowledge-map-YYYY-MM-DD.html       interactive Plotly viz
+    _attachments/knowledge-map-YYYY-MM-DD.png        static export
+    wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD.md    markdown page with stats
 
 The .md page is versioned (timestamp in filename) so successive runs form
 a history of wiki growth, like lint-report-*.md.
@@ -24,7 +24,7 @@ Pipeline parts:
 - build_edges: undirected page-pair edges from wikilinks
 - compute_statistics: counts, connectivity, semantic structure
 - render_figure: Plotly Figure (lazy import)
-- render_artifact_page: markdown for wiki/meta/
+- render_artifact_page: markdown for wiki/meta/kn-maps/
 
 Usage:
     python3 bin/knowledge_map.py                # full output
@@ -533,7 +533,7 @@ def main() -> int:
     ap.add_argument("--no-edges", action="store_true",
                     help="skip wikilink edge overlay")
     ap.add_argument("--no-page", action="store_true",
-                    help="skip generating wiki/meta/knowledge-map-*.md")
+                    help="skip generating wiki/meta/kn-maps/knowledge-map-*.md")
     ap.add_argument("--seed", type=int, default=42,
                     help="UMAP random_state for reproducibility (default: 42)")
     ap.add_argument("--out-dir", type=Path, default=Path("_attachments"),
@@ -630,7 +630,7 @@ def main() -> int:
         page_md = render_artifact_page(
             stats, png_path.name, html_path.name, generated_at,
         )
-        artifact_dir = WIKI_ROOT / "meta"
+        artifact_dir = WIKI_ROOT / "meta" / "kn-maps"
         artifact_dir.mkdir(parents=True, exist_ok=True)
         artifact_path = artifact_dir / f"{base}.md"
         artifact_path.write_text(page_md, encoding="utf-8")

@@ -44,7 +44,11 @@ wiki/
 ├── entities/          именованные объекты: люди, организации, продукты, статьи, модели
 ├── questions/         сохранённые ответы на запросы и синтезы
 ├── domains/           навигационные хабы (MOC) для кластеризации в графе
-└── meta/              dashboard.base, lint-отчёты
+└── meta/
+    ├── embeddings.json     текущий wiki embedding-индекс
+    ├── dashboards/         .base файлы (dashboard + per-domain)
+    ├── lint-reports/       lint-state.json + версионированные lint-report-*.md
+    └── kn-maps/            knowledge-map-*.md (versioned snapshots)
 ```
 
 **Никаких подпапок по темам.** Тематическая классификация — через теги во frontmatter и поле `domain` (wikilink на domain-страницу).
