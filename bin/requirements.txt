@@ -6,4 +6,3 @@ pymupdf4llm>=0.0.27   # PDF → raw markdown for bin/transcribe.py
 pytest>=8.0           # unit tests: python3 -m pytest bin/tests/
 umap-learn>=0.5       # UMAP projection for bin/knowledge_map.py
 plotly>=5.0           # interactive HTML visualization for bin/knowledge_map.py
-kaleido==0.2.1        # static PNG export for plotly (pinned: 1.0+ has API changes)

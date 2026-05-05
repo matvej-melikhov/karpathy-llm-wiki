@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Knowledge map: UMAP-projected wiki visualization with statistics.
 
-Generates three artifacts on each run:
+Generates two artifacts on each run:
 
     _attachments/knowledge-map-YYYY-MM-DD.html       interactive Plotly viz
-    _attachments/knowledge-map-YYYY-MM-DD.png        static export
-    wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD.md    markdown page with stats
+    wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD.md    markdown with stats + iframe
 
 The .md page is versioned (timestamp in filename) so successive runs form
-a history of wiki growth, like lint-report-*.md.
+a history of wiki growth, like lint-report-*.md. The HTML is the canonical
+view — embedded into the .md via iframe so Obsidian renders the
+interactive Plotly figure directly in reading mode.
 
 Visualization:
 - Each content page is one point in 2D UMAP-projected space.
@@ -194,9 +195,21 @@ def assign_domain_colors(domains: list[str], palette: list[str]) -> dict[str, st
 
 
 def hex_to_rgb(h: str) -> tuple[int, int, int]:
-    """'#aabbcc' or 'aabbcc' → (r, g, b)."""
-    h = h.lstrip("#")
-    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    """Parse a color string into (r, g, b) ints in [0, 255].
+
+    Accepts:
+    - hex with hash:    "#aabbcc"
+    - hex without hash: "aabbcc"
+    - rgb function:     "rgb(170, 187, 204)" (Plotly's qualitative.Bold etc.)
+    """
+    s = h.strip()
+    if s.startswith("rgb"):
+        # Strip the "rgb(" prefix and trailing ")", split on commas
+        inner = s[s.index("(") + 1 : s.rindex(")")]
+        parts = [int(p.strip()) for p in inner.split(",")]
+        return parts[0], parts[1], parts[2]
+    s = s.lstrip("#")
+    return int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16)
 
 
 def rgb_to_hex(rgb: tuple[int, int, int]) -> str:
@@ -348,7 +361,16 @@ def render_figure(
 
     fig = go.Figure()
 
-    # Edges first so they render behind nodes
+    # Russian legend labels for page types
+    _TYPE_LEGEND = {
+        "domain": "домены (хабы)",
+        "idea": "идеи",
+        "entity": "сущности",
+        "question": "вопросы",
+        "other": "прочее",
+    }
+
+    # ─── edges first (render behind nodes) ──────────────────────────
     if show_edges and edges:
         edge_xs: list[float | None] = []
         edge_ys: list[float | None] = []
@@ -358,20 +380,20 @@ def render_figure(
         fig.add_trace(go.Scatter(
             x=edge_xs, y=edge_ys,
             mode="lines",
-            line=dict(color="lightgray", width=0.5),
-            opacity=0.6,
+            line=dict(color="rgba(100,100,100,0.25)", width=0.7),
             hoverinfo="skip",
             showlegend=False,
             name="wikilinks",
         ))
 
-    # Group points by page_type so the legend shows types, not individual pages
+    # ─── nodes grouped by type ──────────────────────────────────────
     by_type: dict[str, list[int]] = {}
     for i, info in enumerate(infos):
         by_type.setdefault(info.page_type or "other", []).append(i)
 
-    type_size = {"domain": 18, "idea": 11, "entity": 11, "question": 11}
-    type_order = ["domain", "idea", "entity", "question", "other"]
+    # Larger markers for visibility; domain hubs noticeably bigger
+    type_size = {"domain": 26, "idea": 14, "entity": 14, "question": 14, "other": 12}
+    type_order = ["idea", "entity", "question", "other", "domain"]  # domain last → on top
 
     for ptype in type_order:
         idxs = by_type.get(ptype)
@@ -383,37 +405,64 @@ def render_figure(
             blend_domain_colors(infos[i].domains, domain_to_color)
             for i in idxs
         ]
-        sizes = [type_size.get(ptype, 11) for _ in idxs]
+        sizes = [type_size.get(ptype, 12) for _ in idxs]
         labels = [infos[i].name if ptype == "domain" else "" for i in idxs]
         hover = [
             f"<b>{infos[i].name}</b><br>"
-            f"type: {infos[i].page_type or '—'}<br>"
-            f"domains: {', '.join(infos[i].domains) or '(none)'}<br>"
-            f"inbound: {len(infos[i].inbound)} | outbound: "
-            f"{len(infos[i].body_links | infos[i].fm_links)}"
+            f"тип: {_TYPE_LEGEND.get(infos[i].page_type or 'other', infos[i].page_type or '—')}<br>"
+            f"домены: {', '.join(infos[i].domains) or '—'}<br>"
+            f"входящих: {len(infos[i].inbound)} · "
+            f"исходящих: {len(infos[i].body_links | infos[i].fm_links)}"
             for i in idxs
         ]
         fig.add_trace(go.Scatter(
             x=xs, y=ys,
             mode="markers+text" if ptype == "domain" else "markers",
-            marker=dict(size=sizes, color=colors, line=dict(width=1, color="#444")),
+            marker=dict(
+                size=sizes,
+                color=colors,
+                line=dict(
+                    width=2 if ptype == "domain" else 1,
+                    color="#222" if ptype == "domain" else "#555",
+                ),
+                opacity=0.95,
+            ),
             text=labels,
             textposition="top center",
-            textfont=dict(size=12, color="#222"),
+            textfont=dict(size=14, color="#111", family="Inter, system-ui, sans-serif"),
             hovertext=hover,
             hoverinfo="text",
-            name=ptype,
+            name=_TYPE_LEGEND.get(ptype, ptype),
         ))
 
+    # ─── layout ─────────────────────────────────────────────────────
     fig.update_layout(
-        title=dict(text="Wiki Knowledge Map (UMAP)", x=0.5, xanchor="center"),
+        title=dict(
+            text="<b>Карта знаний wiki</b> · UMAP-проекция эмбеддингов",
+            x=0.5, xanchor="center",
+            font=dict(size=18, family="Inter, system-ui, sans-serif", color="#111"),
+        ),
         xaxis=dict(showticklabels=False, showgrid=False, zeroline=False, visible=False),
-        yaxis=dict(showticklabels=False, showgrid=False, zeroline=False, visible=False),
-        plot_bgcolor="white",
+        yaxis=dict(
+            showticklabels=False, showgrid=False, zeroline=False, visible=False,
+            scaleanchor="x", scaleratio=1,  # equal aspect ratio
+        ),
+        plot_bgcolor="#fafafa",
         paper_bgcolor="white",
         width=1200, height=900,
-        margin=dict(l=20, r=20, t=60, b=20),
-        legend=dict(title="Page type", borderwidth=1, bordercolor="#ccc"),
+        margin=dict(l=30, r=30, t=70, b=30),
+        legend=dict(
+            title=dict(text="<b>Тип страницы</b>"),
+            bgcolor="rgba(255,255,255,0.9)",
+            borderwidth=1, bordercolor="#ccc",
+            x=0.99, y=0.99, xanchor="right", yanchor="top",
+            font=dict(size=12),
+        ),
+        hoverlabel=dict(
+            bgcolor="white",
+            bordercolor="#888",
+            font=dict(size=13, family="Inter, system-ui, sans-serif"),
+        ),
     )
     return fig
 
@@ -425,23 +474,26 @@ def render_figure(
 
 def render_artifact_page(
     stats: dict[str, Any],
-    image_filename: str,
     html_filename: str,
     generated_at: str,
 ) -> str:
-    """Render the wiki/meta/knowledge-map-YYYY-MM-DD.md artifact."""
-    total_pages = sum(stats["type_counts"].values())
-    # Manual plural map — "entity" → "entities", not "entitys"
-    _PLURAL = {
-        "idea": "ideas", "entity": "entities",
-        "question": "questions", "domain": "domains",
-    }
-    type_breakdown = ", ".join(
-        f"{n} {_PLURAL.get(t, t + 's') if n != 1 else t}"
-        for t, n in sorted(stats["type_counts"].items())
-    )
+    """Render the wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD.md artifact.
 
-    lines = [
+    Output is in Russian, uses markdown tables for stats, and embeds the
+    interactive Plotly HTML via an iframe (Obsidian renders it in reading
+    mode). No PNG embed — the iframe is the canonical view.
+    """
+    total_pages = sum(stats["type_counts"].values())
+
+    # Russian labels for page types
+    _TYPE_LABEL = {
+        "idea": "идеи", "entity": "сущности",
+        "question": "вопросы", "domain": "домены",
+    }
+
+    iframe_src = f"../../../_attachments/{html_filename}"
+
+    lines: list[str] = [
         "---",
         "type: meta",
         f"generated: {generated_at}",
@@ -449,64 +501,105 @@ def render_artifact_page(
         f"domains_count: {len(stats['domain_counts'])}",
         "---",
         "",
-        f"# Knowledge Map — {generated_at[:10]}",
+        f"# Карта знаний — {generated_at[:10]}",
         "",
-        f"![[{image_filename}]]",
+        "## Интерактивная карта",
         "",
-        f"Интерактивная HTML-версия: `_attachments/{html_filename}` (открой в браузере для zoom/pan/hover).",
+        f'<iframe src="{iframe_src}" width="100%" height="800" '
+        'style="border:1px solid #ccc; border-radius:6px;"></iframe>',
         "",
-        "## Counts",
+        f"Если iframe не отобразился, открой `_attachments/{html_filename}` "
+        "в браузере напрямую — там доступны zoom, pan и hover с подробностями "
+        "о каждой странице.",
         "",
-        f"- Pages: {total_pages} ({type_breakdown})",
+        "## Как читать",
+        "",
+        "Каждая точка — одна wiki-страница. Координаты — двумерная "
+        "**UMAP-проекция** эмбеддинга страницы (4096-мерный вектор → 2D). "
+        "Чем ближе точки на карте, тем семантически ближе страницы по эмбеддингу "
+        "(не по wikilink-связям).",
+        "",
+        "- **Цвет** — домен страницы (`domain:` во frontmatter). "
+        "Если доменов несколько — цвет усреднён по RGB. Серый — без домена.",
+        "- **Размер** — тип страницы: domain-страницы (хабы) крупнее остальных.",
+        "- **Линии** — wikilinks между страницами (полупрозрачные). "
+        "Видно где явные связи совпадают с семантическими, а где расходятся.",
+        "",
+        "Кластер близких точек одного цвета — когерентный домен. Точки "
+        "на стыке цветов — мульти-доменные страницы. Изолированная точка "
+        "— семантически уникальная страница (или сирота).",
+        "",
+        "## Счётчики",
+        "",
+        "| Тип | Количество |",
+        "|---|---:|",
     ]
+    for t, n in sorted(stats["type_counts"].items()):
+        label = _TYPE_LABEL.get(t, t)
+        lines.append(f"| {label} | {n} |")
+    lines.append(f"| без домена | {stats['unassigned']} |")
+    lines.append(f"| **всего** | **{total_pages}** |")
 
     if stats["domain_counts"]:
-        domain_str = ", ".join(
-            f"[[{d}]] ({n})"
-            for d, n in sorted(stats["domain_counts"].items(), key=lambda x: -x[1])
-        )
-        lines.append(f"- Domains: {domain_str}")
-    lines.append(f"- Unassigned (no domain): {stats['unassigned']}")
+        lines.extend([
+            "",
+            "## Домены",
+            "",
+            "| Домен | Страниц |",
+            "|---|---:|",
+        ])
+        for d, n in sorted(stats["domain_counts"].items(), key=lambda x: -x[1]):
+            lines.append(f"| [[{d}]] | {n} |")
 
     lines.extend([
         "",
-        "## Connectivity",
+        "## Связность",
         "",
-        f"- Valid wikilinks: {stats['valid_outlinks']}",
-        f"- Orphan pages: {len(stats['orphans'])}",
+        "| Метрика | Значение |",
+        "|---|---:|",
+        f"| Wikilinks (валидных) | {stats['valid_outlinks']} |",
+        f"| Страниц-сирот | {len(stats['orphans'])} |",
     ])
     if stats["most_connected"]:
-        mc_str = ", ".join(
-            f"[[{p['name']}]] ({p['inbound']} inbound)"
-            for p in stats["most_connected"][:3]
+        top = stats["most_connected"][0]
+        lines.append(
+            f"| Самая связанная | [[{top['name']}]] ({top['inbound']} входящих) |"
         )
-        lines.append(f"- Most connected: {mc_str}")
 
     lines.extend([
         "",
-        "## Semantic structure",
+        "## Семантическая структура",
         "",
-        f"- Pairs analyzed: {stats['sim_count']}",
-        f"- Pairwise cosine: median {stats['sim_median']:.3f}, "
-        f"p75 {stats['sim_p75']:.3f}, p95 {stats['sim_p95']:.3f}, max {stats['sim_max']:.3f}",
+        "Распределение попарных косинусных близостей всех wiki-страниц "
+        "с эмбеддингами.",
+        "",
+        "| Метрика | Значение |",
+        "|---|---:|",
+        f"| Пар проанализировано | {stats['sim_count']} |",
+        f"| Медиана | {stats['sim_median']:.3f} |",
+        f"| 75-й перцентиль | {stats['sim_p75']:.3f} |",
+        f"| 95-й перцентиль | {stats['sim_p95']:.3f} |",
+        f"| Максимум | {stats['sim_max']:.3f} |",
     ])
     if stats["tightest_pair"]:
         a, b, s = stats["tightest_pair"]
-        lines.append(f"- Tightest pair: [[{a}]] ↔ [[{b}]] (cosine {s:.3f})")
+        lines.append(f"| Самая близкая пара | [[{a}]] ↔ [[{b}]] ({s:.3f}) |")
     if stats["most_isolated"]:
         n, m = stats["most_isolated"]
-        lines.append(f"- Most isolated: [[{n}]] (max similarity to others: {m:.3f})")
+        lines.append(f"| Самая изолированная | [[{n}]] (max близость {m:.3f}) |")
 
     if stats["domain_avg_cosine"]:
         lines.extend([
             "",
-            "## Domain coverage",
+            "## Связность доменов",
             "",
-            "Avg internal cosine = средняя попарная косинусная близость страниц одного домена. "
-            "Высокое значение → плотный когерентный домен, низкое → домен размазан.",
+            "**Avg internal cosine** — средняя попарная близость страниц одного "
+            "домена. Высокое значение (>0.6) — плотный когерентный кластер. "
+            "Низкое — домен размазан по нескольким темам, возможно стоит разбить "
+            "на под-домены.",
             "",
-            "| Domain | Pages | Avg internal cosine |",
-            "|---|---|---|",
+            "| Домен | Страниц | Avg internal cosine |",
+            "|---|---:|---:|",
         ])
         for d in sorted(
             stats["domain_avg_cosine"],
@@ -596,8 +689,10 @@ def main() -> int:
 
     # 5. Domain colors
     domain_counts = collect_domains(infos_with_vecs)
+    # Bold palette: more saturated than default Plotly, better for category
+    # distinction at small marker sizes.
     domain_to_color = assign_domain_colors(
-        list(domain_counts.keys()), pc.qualitative.Plotly,
+        list(domain_counts.keys()), pc.qualitative.Bold,
     )
 
     # 6. Render figure
@@ -611,25 +706,17 @@ def main() -> int:
     today = dt.date.today().isoformat()
     base = f"knowledge-map-{today}"
     html_path = args.out_dir / f"{base}.html"
-    png_path = args.out_dir / f"{base}.png"
 
-    fig.write_html(str(html_path), include_plotlyjs="cdn")
+    # Embed plotly.js inline so the HTML is self-contained — Obsidian's
+    # iframe sandbox blocks remote CDN fetches in some configurations.
+    fig.write_html(str(html_path), include_plotlyjs="inline")
     print(f"wrote {html_path}")
-
-    try:
-        fig.write_image(str(png_path), scale=2, width=1600, height=1200)
-        print(f"wrote {png_path}")
-    except Exception as e:
-        print(f"WARN: PNG export failed: {e}", file=sys.stderr)
-        print("  hint: pip install kaleido==0.2.1", file=sys.stderr)
 
     # 8. Statistics + artifact page
     if not args.no_page:
         stats = compute_statistics(infos_with_vecs)
         generated_at = dt.datetime.now().isoformat(timespec="seconds")
-        page_md = render_artifact_page(
-            stats, png_path.name, html_path.name, generated_at,
-        )
+        page_md = render_artifact_page(stats, html_path.name, generated_at)
         artifact_dir = WIKI_ROOT / "meta" / "kn-maps"
         artifact_dir.mkdir(parents=True, exist_ok=True)
         artifact_path = artifact_dir / f"{base}.md"
