@@ -547,29 +547,14 @@ def render_figure(
             for i in idxs
         ]
 
-        # Legend-only ghost trace: forces the legend swatch to the clean
-        # primary-domain color (Plotly otherwise picks marker.color[0],
-        # which for multi-domain pages may be a blended hue).
-        fig.add_trace(go.Scatter(
-            x=[None], y=[None],
-            mode="markers",
-            marker=dict(
-                size=12, color=legend_clean_color,
-                line=dict(width=0, color=legend_clean_color),
-            ),
-            name=legend_name,
-            legendgroup=legend_name,
-            showlegend=True,
-            hoverinfo="skip",
-        ))
-        # Real data trace: per-point blended colors. Linked to the ghost
-        # via legendgroup → clicking the legend entry toggles both.
+        # Single trace per domain — uniform color = primary domain color.
+        # No blending: first domain wins both in the legend AND in the dot.
         fig.add_trace(go.Scatter(
             x=xs, y=ys,
             mode="markers+text" if any(labels) else "markers",
             marker=dict(
                 size=sizes,
-                color=point_colors,
+                color=legend_clean_color,
                 line=dict(width=line_widths, color=line_colors),
                 opacity=0.92,
             ),
@@ -579,8 +564,6 @@ def render_figure(
             hovertext=hover,
             hoverinfo="text",
             name=legend_name,
-            legendgroup=legend_name,
-            showlegend=False,
         ))
 
     # ─── layout ─────────────────────────────────────────────────────
