@@ -1,31 +1,67 @@
-# Secrets — API keys, tokens
+# =============================================================================
+# llm-wiki .gitignore
+#
+# Политика: коммитим только инфраструктуру (.claude/, bin/, _templates/,
+# CLAUDE.md, ARCHITECTURE.md, README.md). Per-user контент и не-инфра
+# dot-folders — не коммитим. Пустые .gitkeep оставляем как scaffolding,
+# чтобы при `git clone` структура папок воссоздавалась.
+#
+# Подробнее — ARCHITECTURE.md §9.
+# =============================================================================
+
+# === Secrets ===
 .env
 .env.local
 
-# macOS
+# === macOS / IDE / Editor ===
 .DS_Store
-
-# Editor temp files
 *.swp
 *.swo
 *~
-
-# IDE
 .vscode/
 .idea/
 
-# Node (if any tooling appears later)
+# === Node (если появится тулинг) ===
 node_modules/
 
-# Obsidian workspace (user-specific UI state)
-.obsidian/workspace.json
-.obsidian/workspace-mobile.json
+# === Per-user content: raw/ ===
+# Ignore everything inside raw/, but preserve .gitkeep scaffolding.
+/raw/*
+!/raw/.gitkeep
+!/raw/meta/
+/raw/meta/*
+!/raw/meta/.gitkeep
 
-# TMP
-# Wiki system files — created by /wiki INIT on first run
-# Not included in the template so INIT triggers on fresh clone
-# wiki/
+# === Per-user content: wiki/ ===
+/wiki/*
+!/wiki/.gitkeep
+!/wiki/ideas/
+!/wiki/entities/
+!/wiki/domains/
+!/wiki/questions/
+!/wiki/meta/
+/wiki/ideas/*
+!/wiki/ideas/.gitkeep
+/wiki/entities/*
+!/wiki/entities/.gitkeep
+/wiki/domains/*
+!/wiki/domains/.gitkeep
+/wiki/questions/*
+!/wiki/questions/.gitkeep
+/wiki/meta/*
+!/wiki/meta/.gitkeep
 
+# === Per-user content: _attachments/ ===
+/_attachments/
+
+# === Dot-folders, кроме .claude ===
+/.obsidian/
+/.claudian/
+
+# === ВКР draft ===
+/PROJECT.md
+
+# === Бинарные ассеты на корне (если случайно попадут) ===
 *.png
 *.jpg
 *.webp
