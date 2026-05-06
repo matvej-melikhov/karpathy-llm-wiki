@@ -8,7 +8,11 @@
       "Edit(/.claude/skills/save/**)",
       "Edit(/.claude/skills/defuddle/**)",
       "Edit(/.claude/skills/obsidian-bases/**)",
-      "Edit(/.claude/skills/obsidian-markdown/**)"
+      "Edit(/.claude/skills/obsidian-markdown/**)",
+      "Bash(chmod +x bin/setup.sh)",
+      "Bash(mkdir -p .claude/skills/transcribe/references)",
+      "Edit(/.claude/skills/transcribe/**)",
+      "Edit(/.claude/skills/kn-map/**)"
     ]
   },
   "hooks": {

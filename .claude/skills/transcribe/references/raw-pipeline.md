@@ -142,7 +142,38 @@ Transcribe не пишет в `raw/meta/ingested.json` — это зона inges
 
 | Расширение | Библиотека | Изображения | Аудио/видео |
 |---|---|---|---|
-| `.pdf` | pymupdf4llm | ✓ | — |
+| `.pdf` | pymupdf | ✓ | — |
 | `.docx` | pandoc | ✓ | — |
-| `.mp3/.wav/.m4a` | whisper-cpp | — | ✓ (future) |
-| `.mp4/.mov` | ffmpeg + whisper | — | ✓ (future) |
+| `.mp3/.wav/.m4a/.ogg/.flac` | ffmpeg → whisper-cpp | — | ✓ |
+| `.mp4/.mov/.mkv/.webm` | ffmpeg → whisper-cpp | — | ✓ |
+
+---
+
+## Аудио и видео
+
+Для звуковых форматов pipeline отличается:
+
+```
+raw/formats/lecture.mp3
+         ↓
+bin/transcribe.py raw/formats/lecture.mp3
+  ├─ ffmpeg: → 16 kHz mono WAV (временный файл)
+  ├─ whisper-cpp: WAV → текст
+  └─ → _attachments/lecture.transcript.txt
+         ↓
+Манифест:
+{
+  "source": "raw/formats/lecture.mp3",
+  "format": "mp3",
+  "transcript": "_attachments/lecture.transcript.txt",
+  "images": []
+}
+         ↓
+Step 2: агент читает транскрипт через Read tool,
+структурирует на разделы, чистит от слов-паразитов,
+расставляет абзацы. Сохраняет в raw/lecture.md.
+```
+
+**Зависимости:** `whisper-cpp` и `ffmpeg` (через `brew install`). Модель указывается через `$WHISPER_MODEL` (путь к `ggml-*.bin`).
+
+**Видео:** ffmpeg извлекает аудиодорожку — дальше идентично аудио-pipeline.

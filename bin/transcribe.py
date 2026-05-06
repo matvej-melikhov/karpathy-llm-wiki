@@ -21,26 +21,41 @@ Output:
   stderr: progress / warnings
 
 Supported formats:
-  .pdf   — pymupdf (image extraction by page rendering)
-  .docx  — pandoc  (image extraction via --extract-media)
+  .pdf                       — pymupdf (image extraction by page rendering)
+  .docx                      — pandoc  (image extraction via --extract-media)
+  .mp3 .wav .m4a .ogg .flac  — whisper-cpp (audio transcription)
+  .mp4 .mov .mkv .webm       — ffmpeg + whisper-cpp (video → audio → transcript)
+
+For audio/video sources the script outputs the transcript text directly to
+a sidecar file (`_attachments/<stem>.transcript.txt`) and lists it in the
+manifest under `transcript`. The agent (Step 2) reads that text and writes
+the structured markdown.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
 IMAGE_DIR = Path("_attachments")
-SUPPORTED_EXTENSIONS = {".pdf", ".docx"}
+PDF_EXTENSIONS = {".pdf"}
+DOCX_EXTENSIONS = {".docx"}
+AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".flac"}
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm"}
+SUPPORTED_EXTENSIONS = PDF_EXTENSIONS | DOCX_EXTENSIONS | AUDIO_EXTENSIONS | VIDEO_EXTENSIONS
 LARGE_PDF_PAGE_THRESHOLD = 100
 RENDER_DPI = 200        # DPI for page rendering (higher = better quality)
 MERGE_THRESHOLD = 30    # pixels: nearby image regions get merged into one figure
+WHISPER_MODEL_ENV = "WHISPER_MODEL"   # path to ggml model; falls back to default
+WHISPER_DEFAULT_LANG = "auto"         # whisper-cpp auto-detects language
 
 
 def _safe_stem(path: Path) -> str:
@@ -223,6 +238,141 @@ def extract_docx_images(path: Path) -> list[str]:
 
 
 # ────────────────────────────────────────────────────────────────────────
+# Audio / video transcription (whisper-cpp + ffmpeg)
+# ────────────────────────────────────────────────────────────────────────
+
+
+def _whisper_binary() -> str | None:
+    """Return path to whisper-cpp CLI, or None if not installed.
+
+    The Homebrew formula installs the binary as `whisper-cli`; some builds
+    expose `whisper-cpp` or `main`. Try the common names.
+    """
+    for name in ("whisper-cli", "whisper-cpp", "whisper"):
+        p = shutil.which(name)
+        if p:
+            return p
+    return None
+
+
+def _whisper_model_path() -> str | None:
+    """Resolve a ggml model path for whisper-cpp.
+
+    Priority:
+      1. $WHISPER_MODEL env var
+      2. common Homebrew share path
+      3. None — caller must handle absence
+    """
+    env = os.environ.get(WHISPER_MODEL_ENV)
+    if env and Path(env).is_file():
+        return env
+
+    candidates = [
+        Path.home() / "models" / "ggml-base.bin",
+        Path("/opt/homebrew/share/whisper-cpp/ggml-base.bin"),
+        Path("/usr/local/share/whisper-cpp/ggml-base.bin"),
+    ]
+    for c in candidates:
+        if c.is_file():
+            return str(c)
+    return None
+
+
+def _run_whisper(audio_path: Path, out_stem: Path) -> Path | None:
+    """Invoke whisper-cpp on a 16 kHz WAV file. Returns path to .txt transcript."""
+    binary = _whisper_binary()
+    if not binary:
+        print(
+            "whisper-cpp not installed. Run: brew install whisper-cpp",
+            file=sys.stderr,
+        )
+        return None
+
+    model = _whisper_model_path()
+    if not model:
+        print(
+            f"no whisper model found. Set ${WHISPER_MODEL_ENV} to a ggml-*.bin file "
+            f"(download from https://huggingface.co/ggerganov/whisper.cpp)",
+            file=sys.stderr,
+        )
+        return None
+
+    cmd = [
+        binary,
+        "-m", model,
+        "-f", str(audio_path),
+        "-l", WHISPER_DEFAULT_LANG,
+        "-otxt",
+        "-of", str(out_stem),     # whisper appends .txt
+        "--no-prints",
+    ]
+    print(f"  running whisper-cpp ({Path(model).name})...", file=sys.stderr)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        print(f"whisper-cpp error: {result.stderr.strip()}", file=sys.stderr)
+        return None
+
+    txt = out_stem.with_suffix(out_stem.suffix + ".txt") if out_stem.suffix else Path(str(out_stem) + ".txt")
+    if not txt.is_file():
+        # whisper-cpp writes "<of>.txt" — handle both shapes
+        alt = Path(str(out_stem) + ".txt")
+        if alt.is_file():
+            txt = alt
+        else:
+            print(f"whisper-cpp produced no transcript at {txt}", file=sys.stderr)
+            return None
+    return txt
+
+
+def _ffmpeg_to_wav(src: Path, dst: Path) -> bool:
+    """Convert any audio/video to 16 kHz mono WAV (whisper-cpp's required format)."""
+    if not shutil.which("ffmpeg"):
+        print("ffmpeg not installed. Run: brew install ffmpeg", file=sys.stderr)
+        return False
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(src),
+        "-ar", "16000",
+        "-ac", "1",
+        "-c:a", "pcm_s16le",
+        str(dst),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        print(f"ffmpeg error: {result.stderr.strip()[-500:]}", file=sys.stderr)
+        return False
+    return True
+
+
+def extract_audio_transcript(path: Path) -> str | None:
+    """Audio → 16kHz WAV → whisper-cpp → .txt in _attachments/.
+
+    Returns relative path to the transcript file, or None on failure.
+    """
+    IMAGE_DIR.mkdir(exist_ok=True)
+    stem = _safe_stem(path)
+    out_stem = IMAGE_DIR / f"{stem}.transcript"
+
+    with tempfile.TemporaryDirectory() as td:
+        wav = Path(td) / f"{stem}.wav"
+        if not _ffmpeg_to_wav(path, wav):
+            return None
+        txt = _run_whisper(wav, out_stem)
+        if txt is None:
+            return None
+    print(f"  [audio] transcript: {txt}", file=sys.stderr)
+    return str(txt)
+
+
+def extract_video_transcript(path: Path) -> str | None:
+    """Video → ffmpeg extracts audio track → whisper-cpp.
+
+    Same pipeline as audio (ffmpeg handles both transparently).
+    """
+    return extract_audio_transcript(path)
+
+
+# ────────────────────────────────────────────────────────────────────────
 # Main
 # ────────────────────────────────────────────────────────────────────────
 
@@ -258,17 +408,24 @@ def main() -> int:
 
     print(f"extracting images: {path}", file=sys.stderr)
 
-    if ext == ".pdf":
+    n_pages = 0
+    large = False
+    images: list[str] = []
+    transcript: str | None = None
+
+    if ext in PDF_EXTENSIONS:
         n_pages = pdf_page_count(path)
         print(f"  pages: {n_pages}", file=sys.stderr)
         large = n_pages > LARGE_PDF_PAGE_THRESHOLD
         if large:
             print(f"  note: large document — agent will skip restoration step", file=sys.stderr)
         images = extract_pdf_images(path)
-    else:  # .docx
-        n_pages = 0
-        large = False
+    elif ext in DOCX_EXTENSIONS:
         images = extract_docx_images(path)
+    elif ext in AUDIO_EXTENSIONS:
+        transcript = extract_audio_transcript(path)
+    elif ext in VIDEO_EXTENSIONS:
+        transcript = extract_video_transcript(path)
 
     manifest = {
         "source": str(path),
@@ -276,9 +433,14 @@ def main() -> int:
         "pages": n_pages,
         "large_doc": large,
         "images": images,
+        "transcript": transcript,
     }
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
-    print(f"done: {len(images)} image(s) extracted", file=sys.stderr)
+
+    if transcript:
+        print(f"done: transcript saved to {transcript}", file=sys.stderr)
+    else:
+        print(f"done: {len(images)} image(s) extracted", file=sys.stderr)
     return 0
 
 
