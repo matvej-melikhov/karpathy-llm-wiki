@@ -194,6 +194,41 @@ def assign_domain_colors(domains: list[str], palette: list[str]) -> dict[str, st
     return {d: palette[i % len(palette)] for i, d in enumerate(sorted(domains))}
 
 
+def generate_distinct_palette(
+    n: int,
+    *,
+    hue_offset_deg: float = 220.0,
+    saturation: float = 0.70,
+    lightness: float = 0.65,
+) -> list[str]:
+    """Generate N maximally-distinguishable hex colors via HSL color wheel.
+
+    Hues are evenly spaced (360/N degrees apart), so adjacent legend entries
+    are diametrically (or near-diametrically) opposite on the color wheel.
+
+    Defaults are tuned for dark backgrounds:
+    - lightness 0.65 — bright enough to read on #0F1419, not pastel
+    - saturation 0.70 — vivid enough for distinction, not neon
+    - hue_offset 220° — start at blue (modern/tech look) rather than red
+
+    Examples for n=4 with default offset:
+        220°=blue, 310°=pink, 40°=amber, 130°=green
+    """
+    import colorsys
+    if n <= 0:
+        return []
+    palette: list[str] = []
+    for i in range(n):
+        hue = ((hue_offset_deg + i * 360.0 / n) % 360.0) / 360.0
+        r, g, b = colorsys.hls_to_rgb(hue, lightness, saturation)
+        palette.append(
+            "#{:02x}{:02x}{:02x}".format(
+                round(r * 255), round(g * 255), round(b * 255),
+            )
+        )
+    return palette
+
+
 def hex_to_rgb(h: str) -> tuple[int, int, int]:
     """Parse a color string into (r, g, b) ints in [0, 255].
 
@@ -216,19 +251,72 @@ def rgb_to_hex(rgb: tuple[int, int, int]) -> str:
     return "#{:02x}{:02x}{:02x}".format(*rgb)
 
 
+_BLEND_LIGHTNESS_SHIFT = -0.18   # darker than pure domain colors
+_BLEND_SATURATION_SHIFT = -0.05  # very slightly muted
+
+
 def blend_domain_colors(
     domains: list[str],
     domain_to_color: dict[str, str],
     default: str = "#cccccc",
 ) -> str:
-    """Multi-domain page → averaged RGB. No domains or all-unknown → default."""
+    """Multi-domain page → blended color in HSL space. Single domain → its
+    color. None or all-unknown → default.
+
+    Why HSL and not RGB. RGB-averaging of two complementary hues (e.g.,
+    yellow + blue at 180°) cancels chroma → gray. HSL hue averaging via
+    vector sum on the unit circle preserves color identity.
+
+    Why blends are darker than pure domain colors. With N evenly-spaced
+    domain hues, midpoints between some pairs land exactly on another
+    domain's hue (e.g., for 4 domains at 90° steps, midpoint of opposite
+    domains = third domain's hue). Pure-hue collision would visually merge
+    multi-domain pages with the wrong cluster. We shift the blend's
+    lightness down (-0.18) so the blend stays visually distinct from any
+    pure domain color even when their hues coincide.
+
+    Hue-cancellation edge case: when vector sum has near-zero magnitude
+    (exactly opposite hues), atan2 is undefined. Fall back to linear
+    midpoint of sorted hues → e.g., yellow(40°)+blue(220°) → green(130°).
+    """
     if not domains:
         return default
-    rgbs = [hex_to_rgb(domain_to_color[d]) for d in domains if d in domain_to_color]
-    if not rgbs:
+    hex_codes = [domain_to_color[d] for d in domains if d in domain_to_color]
+    if not hex_codes:
         return default
-    avg = tuple(sum(c[i] for c in rgbs) // len(rgbs) for i in range(3))
-    return rgb_to_hex(avg)
+    if len(hex_codes) == 1:
+        return hex_codes[0]
+
+    import colorsys
+    import math
+
+    hsls = []
+    for c in hex_codes:
+        r, g, b = hex_to_rgb(c)
+        h, l, s = colorsys.rgb_to_hls(r / 255, g / 255, b / 255)
+        hsls.append((h, l, s))
+
+    avg_l = sum(item[1] for item in hsls) / len(hsls)
+    avg_s = sum(item[2] for item in hsls) / len(hsls)
+
+    sin_sum = sum(math.sin(2 * math.pi * h) for h, _, _ in hsls)
+    cos_sum = sum(math.cos(2 * math.pi * h) for h, _, _ in hsls)
+    magnitude = math.sqrt(sin_sum * sin_sum + cos_sum * cos_sum)
+
+    if magnitude < 0.05 * len(hsls):
+        sorted_hues = sorted(h for h, _, _ in hsls)
+        avg_h = sum(sorted_hues) / len(sorted_hues)
+    else:
+        avg_h = math.atan2(sin_sum, cos_sum) / (2 * math.pi)
+        if avg_h < 0:
+            avg_h += 1
+
+    # Apply blend offset (only multi-domain, since len > 1 here)
+    avg_l = max(0.0, min(1.0, avg_l + _BLEND_LIGHTNESS_SHIFT))
+    avg_s = max(0.0, min(1.0, avg_s + _BLEND_SATURATION_SHIFT))
+
+    r, g, b = colorsys.hls_to_rgb(avg_h, avg_l, avg_s)
+    return rgb_to_hex((round(r * 255), round(g * 255), round(b * 255)))
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -356,19 +444,34 @@ def render_figure(
     domain_to_color: dict[str, str],
     show_edges: bool,
 ):
-    """Build a Plotly figure. Returns plotly.graph_objects.Figure."""
+    """Build a Plotly figure with domain-grouped legend.
+
+    Legend groups points by **primary domain** (first in `info.domains`)
+    so the colored swatches in the legend honestly correspond to colors
+    on the map. Page type controls only marker size (domain hubs larger),
+    documented in the artifact-page caption — not in the legend.
+    """
     import plotly.graph_objects as go
 
     fig = go.Figure()
 
-    # Russian legend labels for page types
-    _TYPE_LEGEND = {
-        "domain": "домены (хабы)",
-        "idea": "идеи",
-        "entity": "сущности",
-        "question": "вопросы",
-        "other": "прочее",
+    _NO_DOMAIN_KEY = "_no_domain"
+    _NO_DOMAIN_COLOR = "#6B7280"  # neutral gray-500 (visible on dark bg)
+    _NO_DOMAIN_LABEL = "без домена"
+
+    _TYPE_LABEL = {
+        "domain": "домен", "idea": "идея",
+        "entity": "сущность", "question": "вопрос",
     }
+
+    # Dark-theme color tokens (Tailwind-inspired)
+    _BG = "#0F1419"          # plot/paper background
+    _TEXT = "#E5E7EB"        # primary light gray text
+    _TEXT_MUTED = "#9CA3AF"  # muted text
+    _GRID = "rgba(255,255,255,0.04)"
+    _OUTLINE = "#1F2937"     # marker stroke on dark bg
+    _OUTLINE_HUB = "#F9FAFB" # white-ish stroke for domain hubs
+    _EDGE = "rgba(129,140,248,0.18)"  # subtle indigo edges
 
     # ─── edges first (render behind nodes) ──────────────────────────
     if show_edges and edges:
@@ -380,88 +483,149 @@ def render_figure(
         fig.add_trace(go.Scatter(
             x=edge_xs, y=edge_ys,
             mode="lines",
-            line=dict(color="rgba(100,100,100,0.25)", width=0.7),
+            line=dict(color=_EDGE, width=0.6),
             hoverinfo="skip",
             showlegend=False,
             name="wikilinks",
         ))
 
-    # ─── nodes grouped by type ──────────────────────────────────────
-    by_type: dict[str, list[int]] = {}
+    # ─── group nodes by primary domain ──────────────────────────────
+    # Primary domain = first item in info.domains (= first wikilink in the
+    # page's `domain:` frontmatter field). Schema convention: list from
+    # specific to general (e.g., [Reinforcement Learning, Machine Learning]).
+    # The lint check `domain-order` enforces this ordering across the wiki.
+    by_primary: dict[str, list[int]] = {}
     for i, info in enumerate(infos):
-        by_type.setdefault(info.page_type or "other", []).append(i)
+        primary = info.domains[0] if info.domains else _NO_DOMAIN_KEY
+        by_primary.setdefault(primary, []).append(i)
 
-    # Larger markers for visibility; domain hubs noticeably bigger
-    type_size = {"domain": 26, "idea": 14, "entity": 14, "question": 14, "other": 12}
-    type_order = ["idea", "entity", "question", "other", "domain"]  # domain last → on top
+    # Stable order: domains by member count desc, then alphabetical;
+    # "без домена" last.
+    domain_order = sorted(
+        (k for k in by_primary if k != _NO_DOMAIN_KEY),
+        key=lambda d: (-len(by_primary[d]), d),
+    )
+    if _NO_DOMAIN_KEY in by_primary:
+        domain_order.append(_NO_DOMAIN_KEY)
 
-    for ptype in type_order:
-        idxs = by_type.get(ptype)
-        if not idxs:
-            continue
+    type_size = {"domain": 26, "idea": 14, "entity": 14, "question": 14}
+
+    for domain in domain_order:
+        idxs = by_primary[domain]
+        legend_name = _NO_DOMAIN_LABEL if domain == _NO_DOMAIN_KEY else domain
+        legend_clean_color = (
+            domain_to_color.get(domain, _NO_DOMAIN_COLOR)
+            if domain != _NO_DOMAIN_KEY else _NO_DOMAIN_COLOR
+        )
+
         xs = [float(coords[i, 0]) for i in idxs]
         ys = [float(coords[i, 1]) for i in idxs]
-        colors = [
-            blend_domain_colors(infos[i].domains, domain_to_color)
+        # Per-point color: blended RGB if multi-domain, primary color otherwise.
+        # Visually preserves the "between clusters" hue for boundary pages.
+        point_colors = [
+            blend_domain_colors(
+                infos[i].domains, domain_to_color, default=_NO_DOMAIN_COLOR,
+            )
             for i in idxs
         ]
-        sizes = [type_size.get(ptype, 12) for _ in idxs]
-        labels = [infos[i].name if ptype == "domain" else "" for i in idxs]
+        sizes = [type_size.get(infos[i].page_type, 12) for i in idxs]
+        line_widths = [2 if infos[i].page_type == "domain" else 0.8 for i in idxs]
+        line_colors = [
+            _OUTLINE_HUB if infos[i].page_type == "domain" else _OUTLINE
+            for i in idxs
+        ]
+        labels = [
+            infos[i].name if infos[i].page_type == "domain" else ""
+            for i in idxs
+        ]
         hover = [
             f"<b>{infos[i].name}</b><br>"
-            f"тип: {_TYPE_LEGEND.get(infos[i].page_type or 'other', infos[i].page_type or '—')}<br>"
+            f"тип: {_TYPE_LABEL.get(infos[i].page_type or '', infos[i].page_type or '—')}<br>"
             f"домены: {', '.join(infos[i].domains) or '—'}<br>"
             f"входящих: {len(infos[i].inbound)} · "
             f"исходящих: {len(infos[i].body_links | infos[i].fm_links)}"
             for i in idxs
         ]
+
+        # Legend-only ghost trace: forces the legend swatch to the clean
+        # primary-domain color (Plotly otherwise picks marker.color[0],
+        # which for multi-domain pages may be a blended hue).
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None],
+            mode="markers",
+            marker=dict(
+                size=12, color=legend_clean_color,
+                line=dict(width=0, color=legend_clean_color),
+            ),
+            name=legend_name,
+            legendgroup=legend_name,
+            showlegend=True,
+            hoverinfo="skip",
+        ))
+        # Real data trace: per-point blended colors. Linked to the ghost
+        # via legendgroup → clicking the legend entry toggles both.
         fig.add_trace(go.Scatter(
             x=xs, y=ys,
-            mode="markers+text" if ptype == "domain" else "markers",
+            mode="markers+text" if any(labels) else "markers",
             marker=dict(
                 size=sizes,
-                color=colors,
-                line=dict(
-                    width=2 if ptype == "domain" else 1,
-                    color="#222" if ptype == "domain" else "#555",
-                ),
-                opacity=0.95,
+                color=point_colors,
+                line=dict(width=line_widths, color=line_colors),
+                opacity=0.92,
             ),
             text=labels,
             textposition="top center",
-            textfont=dict(size=14, color="#111", family="Inter, system-ui, sans-serif"),
+            textfont=dict(size=13, color=_TEXT, family="Inter, sans-serif"),
             hovertext=hover,
             hoverinfo="text",
-            name=_TYPE_LEGEND.get(ptype, ptype),
+            name=legend_name,
+            legendgroup=legend_name,
+            showlegend=False,
         ))
 
     # ─── layout ─────────────────────────────────────────────────────
+    # Modern dark-dashboard styling (Stripe / Linear / Notion vibe):
+    # - dark background with desaturated accent colors
+    # - Inter font, light-gray text
+    # - left-aligned title, horizontal legend on top
+    # - axes invisible, equal aspect via scaleanchor preserves distances
+    # - figure is responsive (autosize) — fills iframe/container
     fig.update_layout(
         title=dict(
-            text="<b>Карта знаний wiki</b> · UMAP-проекция эмбеддингов",
-            x=0.5, xanchor="center",
-            font=dict(size=18, family="Inter, system-ui, sans-serif", color="#111"),
+            text="<b>Карта знаний wiki</b>",
+            x=0.03, xanchor="left",
+            y=0.97, yanchor="top",
+            font=dict(size=20, family="Inter, sans-serif", color=_TEXT),
+            pad=dict(t=10, l=10),
         ),
-        xaxis=dict(showticklabels=False, showgrid=False, zeroline=False, visible=False),
+        font=dict(family="Inter, sans-serif", color=_TEXT, size=12),
+        xaxis=dict(visible=False),
         yaxis=dict(
-            showticklabels=False, showgrid=False, zeroline=False, visible=False,
-            scaleanchor="x", scaleratio=1,  # equal aspect ratio
+            visible=False,
+            scaleanchor="x", scaleratio=1,
         ),
-        plot_bgcolor="#fafafa",
-        paper_bgcolor="white",
-        width=1200, height=900,
-        margin=dict(l=30, r=30, t=70, b=30),
+        paper_bgcolor=_BG,
+        plot_bgcolor=_BG,
+        autosize=True,
+        margin=dict(l=40, r=20, t=80, b=40),
         legend=dict(
-            title=dict(text="<b>Тип страницы</b>"),
-            bgcolor="rgba(255,255,255,0.9)",
-            borderwidth=1, bordercolor="#ccc",
-            x=0.99, y=0.99, xanchor="right", yanchor="top",
-            font=dict(size=12),
+            title=dict(text=""),
+            orientation="h",
+            x=0.5, xanchor="center",
+            y=-0.02, yanchor="top",
+            bgcolor="rgba(0,0,0,0)",
+            font=dict(size=12, color=_TEXT),
+            itemsizing="constant",
         ),
         hoverlabel=dict(
-            bgcolor="white",
-            bordercolor="#888",
-            font=dict(size=13, family="Inter, system-ui, sans-serif"),
+            bgcolor="rgba(15,20,25,0.95)",
+            bordercolor="#374151",
+            font=dict(family="Inter, sans-serif", color=_TEXT, size=12),
+        ),
+        modebar=dict(
+            bgcolor="rgba(0,0,0,0)",
+            color=_TEXT_MUTED,
+            activecolor=_TEXT,
         ),
     )
     return fig
@@ -476,12 +640,18 @@ def render_artifact_page(
     stats: dict[str, Any],
     html_filename: str,
     generated_at: str,
+    iframe_src: str | None = None,
 ) -> str:
     """Render the wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD.md artifact.
 
     Output is in Russian, uses markdown tables for stats, and embeds the
     interactive Plotly HTML via an iframe (Obsidian renders it in reading
     mode). No PNG embed — the iframe is the canonical view.
+
+    iframe_src is the URL the iframe points to. Caller should construct it
+    via Obsidian's `app://local/<absolute-path>` scheme — Obsidian's iframe
+    sandbox blocks file://, relative paths, and (in some configs)
+    app://obsidian.md/, but app://local/ works for local files.
     """
     total_pages = sum(stats["type_counts"].values())
 
@@ -491,7 +661,9 @@ def render_artifact_page(
         "question": "вопросы", "domain": "домены",
     }
 
-    iframe_src = f"../../../_attachments/{html_filename}"
+    # Default fallback if caller doesn't provide an explicit URL
+    if iframe_src is None:
+        iframe_src = f"app://obsidian.md/_attachments/{html_filename}"
 
     lines: list[str] = [
         "---",
@@ -505,8 +677,9 @@ def render_artifact_page(
         "",
         "## Интерактивная карта",
         "",
-        f'<iframe src="{iframe_src}" width="100%" height="800" '
-        'style="border:1px solid #ccc; border-radius:6px;"></iframe>',
+        f'<iframe src="{iframe_src}" '
+        'style="width:100%; aspect-ratio: 4 / 3; border:1px solid #ccc; '
+        'border-radius:6px; display:block;"></iframe>',
         "",
         f"Если iframe не отобразился, открой `_attachments/{html_filename}` "
         "в браузере напрямую — там доступны zoom, pan и hover с подробностями "
@@ -519,15 +692,20 @@ def render_artifact_page(
         "Чем ближе точки на карте, тем семантически ближе страницы по эмбеддингу "
         "(не по wikilink-связям).",
         "",
-        "- **Цвет** — домен страницы (`domain:` во frontmatter). "
-        "Если доменов несколько — цвет усреднён по RGB. Серый — без домена.",
-        "- **Размер** — тип страницы: domain-страницы (хабы) крупнее остальных.",
+        "- **Цвет** — **первый домен** в `domain:` страницы. По convention "
+        "wiki, домены перечисляются от частного к общему, поэтому первый — "
+        "самый специфичный. Например, у страницы с "
+        "`[Reinforcement Learning, Machine Learning]` цвет — RL. "
+        "Полный список доменов виден в hover. Серый — страница без домена.",
+        "- **Размер** — тип страницы: domain-страницы (хабы) крупнее остальных. "
+        "Тип в легенде не показан, чтобы не путать с цветом.",
         "- **Линии** — wikilinks между страницами (полупрозрачные). "
         "Видно где явные связи совпадают с семантическими, а где расходятся.",
         "",
-        "Кластер близких точек одного цвета — когерентный домен. Точки "
-        "на стыке цветов — мульти-доменные страницы. Изолированная точка "
-        "— семантически уникальная страница (или сирота).",
+        "Когерентный кластер — много точек одного цвета рядом. Если страница "
+        "оторвалась от своего цветового кластера — её эмбеддинг ушёл в чужую "
+        "семантическую область (потенциальный сигнал для ingest или lint). "
+        "Изолированная точка — семантически уникальная страница (или сирота).",
         "",
         "## Счётчики",
         "",
@@ -689,11 +867,11 @@ def main() -> int:
 
     # 5. Domain colors
     domain_counts = collect_domains(infos_with_vecs)
-    # Bold palette: more saturated than default Plotly, better for category
-    # distinction at small marker sizes.
-    domain_to_color = assign_domain_colors(
-        list(domain_counts.keys()), pc.qualitative.Bold,
-    )
+    # HSL-evenly-spaced palette: maximum perceptual distinction between any
+    # number of domains. Tuned for dark background — light enough to read,
+    # not pastel. See generate_distinct_palette() for parameters.
+    palette = generate_distinct_palette(max(len(domain_counts), 1))
+    domain_to_color = assign_domain_colors(list(domain_counts.keys()), palette)
 
     # 6. Render figure
     fig = render_figure(
@@ -709,14 +887,32 @@ def main() -> int:
 
     # Embed plotly.js inline so the HTML is self-contained — Obsidian's
     # iframe sandbox blocks remote CDN fetches in some configurations.
-    fig.write_html(str(html_path), include_plotlyjs="inline")
+    # responsive=True makes the figure fill its container (the iframe).
+    fig.write_html(
+        str(html_path),
+        include_plotlyjs="inline",
+        config={"responsive": True},
+    )
     print(f"wrote {html_path}")
 
     # 8. Statistics + artifact page
     if not args.no_page:
         stats = compute_statistics(infos_with_vecs)
         generated_at = dt.datetime.now().isoformat(timespec="seconds")
-        page_md = render_artifact_page(stats, html_path.name, generated_at)
+        # For local HTML embed, file:///<absolute-path> works reliably in
+        # Obsidian's iframe sandbox (no CSP restrictions). Path is machine-
+        # specific (encoded into markdown), but artifact pages are local-only
+        # auto-generated reports anyway. URL-encode special characters.
+        from urllib.parse import quote
+        abs_html = html_path.resolve()
+        # ?v=<timestamp> cache-buster — Obsidian / Electron caches local
+        # iframes aggressively, and without this the iframe sticks on the
+        # previous render even after the HTML file is regenerated.
+        cache_buster = dt.datetime.now().strftime("%Y%m%d%H%M%S")
+        iframe_src = f"file://{quote(str(abs_html))}?v={cache_buster}"
+        page_md = render_artifact_page(
+            stats, html_path.name, generated_at, iframe_src=iframe_src,
+        )
         artifact_dir = WIKI_ROOT / "meta" / "kn-maps"
         artifact_dir.mkdir(parents=True, exist_ok=True)
         artifact_path = artifact_dir / f"{base}.md"

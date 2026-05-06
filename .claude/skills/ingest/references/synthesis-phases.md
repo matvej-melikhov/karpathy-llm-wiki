@@ -111,7 +111,7 @@
   - обычные слова с заглавной первой буквой: `Alignment`, `Optimization`
   - никаких lowercase-аббревиатур (`ml`, `rl`) и никаких смешений
 - `status: ...` — **строго одно из**: `evaluation`, `in-progress`, `ready`. Никаких `stable`, `draft`, `done`. Если страница только что создана и содержание не верифицировано — `evaluation`. Для `entity` поле `status` **не ставится** вообще.
-- `domain: []` — пока пусто; заполнится при создании domain-страниц
+- `domain: [...]` — wikilinks на domain-страницы (`wiki/domains/`). **Convention: упорядочивать от частного к общему** — первый в списке считается primary classification (например, для PPO: `[Reinforcement Learning, Machine Learning]`). Это редакторское решение, lint не enforce'ит. Если страница пока без domain — `domain: []`
 - `updated: YYYY-MM-DD`
 
 Полная схема — `.claude/skills/wiki/references/frontmatter.md`.
@@ -251,12 +251,15 @@
    - Краткое описание области (1-2 абзаца, опираясь на содержимое связанных страниц)
    - Раздел "Ключевые концепции" — 3-5 страниц с наибольшим числом backlinks из этой области
    - Bases-запрос (уже есть в шаблоне) — он автоматически подтянет все страницы с `domain contains "[[<Title>]]"`
-3. **Обновить все страницы с этим тегом**: добавить в frontmatter `domain: ["[[<Title>]]"]`. Если поле уже есть с другими значениями — дописать в список:
+3. **Обновить все страницы с этим тегом**: добавить в frontmatter `domain: ["[[<Title>]]"]`. Если поле уже есть с другими значениями — дописать в список **в правильной позиции**.
+
+   **Convention: домены в `domain:` упорядочены от частного к общему.** Первый в списке — primary classification (используется для раскраски на knowledge map). Например, для страницы про PPO правильный порядок:
    ```yaml
    domain:
-     - "[[Existing Domain]]"
-     - "[[<Title>]]"
+     - "[[Reinforcement Learning]]"   # узкий
+     - "[[Machine Learning]]"          # широкий
    ```
+   Это редакторское решение, не enforced (см. `wiki/references/frontmatter.md`). При вставке нового домена ставь его в позицию по убыванию специфичности.
 4. Записать в `wiki/log.md` сверху:
    ```markdown
    ## YYYY-MM-DD — domain | <Title>
