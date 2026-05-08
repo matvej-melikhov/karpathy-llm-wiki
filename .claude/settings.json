@@ -56,6 +56,12 @@
             "command": "cd \"$PWD\"; [ -f .env ] && { set -a; . ./.env; set +a; }; [ -f bin/embed.py ] && python3 bin/embed.py update >/dev/null 2>&1 || true",
             "async": true,
             "timeout": 600
+          },
+          {
+            "type": "command",
+            "command": "cd \"$PWD\"; [ -f bin/gen_dashboards.py ] && python3 bin/gen_dashboards.py >/dev/null 2>&1 || true",
+            "async": true,
+            "timeout": 60
           }
         ]
       }

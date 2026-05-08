@@ -23,12 +23,13 @@ Vault разделён на четыре слоя по жизненному ци
 
 | Путь | Содержимое | Кто пишет | Кто читает |
 |---|---|---|---|
-| `raw/` | Иммутабельные источники: `.md`, `.pdf`, `.docx`, видео-транскрипты, URL-снимки. Один файл = один источник. | пользователь | `ingest`, `transcribe` |
+| `raw/` | Источники: `.md`, `.pdf`, `.docx`, видео-транскрипты, URL-снимки. Один файл = один источник. | пользователь, `transcribe` (только конвертация бинарников из `raw/formats/`) | `ingest`, `transcribe` |
 | `raw/formats/` | Бинарные оригиналы (видео `.mkv`, аудио, картинки), которые требуют конвертации в `raw/*.md` перед ingest. | пользователь | `transcribe` |
-| `raw/meta/` | Метаданные источников (произвольно). | пользователь | – |
+| `raw/meta/embeddings.json` | Эмбеддинги сырых источников (для dedup и approx-lint). | `bin/embed.py` | `ingest`, `lint` |
+| `raw/meta/ingested.json` | Манифест dedup: какие источники уже обработаны (хеши, source_url, целевые wiki-страницы). | `ingest` | `ingest`, `transcribe` |
 | `_attachments/` | Картинки и PDF, на которые ссылаются wiki-страницы через `![[...]]`. | `ingest` (при ingest изображений), пользователь | Obsidian, читатели |
 
-**Инвариант:** Claude **никогда** не модифицирует `raw/`. Если источник плохой — пользователь правит вручную. `_attachments/` — additive: новые файлы добавляются, старые остаются.
+**Инвариант:** Claude **никогда не редактирует существующие файлы в `raw/`**. Создание новых файлов допустимо только через `transcribe` при конвертации бинарников из `raw/formats/`. Если источник плохой — пользователь правит вручную. `_attachments/` — additive: новые файлы добавляются, старые остаются. `raw/meta/*.json` — generated артефакты, ими управляют скрипты и `ingest`.
 
 ### 1.2 Контент wiki (LLM synthesis)
 
@@ -57,11 +58,13 @@ Vault разделён на четыре слоя по жизненному ци
 
 | Путь | Что хранит | Кто генерирует |
 |---|---|---|
-| `wiki/meta/embeddings.json` | Эмбеддинги всех страниц (≈7 MB на 50 страниц). | `bin/embed.py` |
+| `raw/meta/embeddings.json` | Эмбеддинги сырых источников (для dedup при ingest и approx-lint). | `bin/embed.py` |
+| `raw/meta/ingested.json` | Манифест dedup: source_url, хеши файлов, целевые wiki-страницы. Чтобы повторный ingest не запускал синтез заново. | `ingest` |
+| `wiki/meta/embeddings.json` | Эмбеддинги всех wiki-страниц (≈7 MB на 50 страниц). | `bin/embed.py` |
 | `wiki/meta/lint-reports/lint-state.json` | Текущее состояние lint (`open_issues`, `aggregate_hash`, `contradiction_candidates`). | `bin/lint.py` (= скилл `lint`) |
 | `wiki/meta/lint-reports/lint-report-YYYY-MM-DD.md` | Человеко-читаемый отчёт (опц.). | `lint` (по запросу) |
 | `wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD.md` | Снимок графа знаний (плотность связей, кластеры). | `bin/knowledge_map.py` |
-| `wiki/meta/dashboards/*.base` | Obsidian Bases-файлы для дашбордов по доменам. | `obsidian-bases` (вручную) |
+| `wiki/meta/dashboards/<Domain>.base`, `dashboard.base` | Obsidian Bases-файлы. Дефолтные шаблоны генерируются скриптом; ручные правки сохраняются. | `bin/gen_dashboards.py` (create-only); `obsidian-bases` (для нешаблонных Bases) |
 
 **Семантика:** все эти артефакты **derivable** — могут быть пересчитаны из контента. Их безопасно удалять. В `.gitignore` обычно входит `embeddings.json` (большой бинарный JSON).
 
@@ -71,7 +74,7 @@ Vault разделён на четыре слоя по жизненному ци
 
 | Семантика | Описание | Где |
 |---|---|---|
-| **Immutable** | Никогда не правится Claude'ом. | `raw/` |
+| **Immutable** | Существующие файлы не редактируются Claude'ом. Запись новых — только в узких случаях (см. ниже). | `raw/` (новые файлы только через `transcribe`) |
 | **Overwrite** | Файл перезаписывается целиком при каждом обновлении. | `cache.md`, `summary.md`, `lint-state.json` |
 | **Append-only** | Только добавление новых записей (обычно сверху). Старое не редактируется. | `log.md` |
 | **Additive** | Создаются новые файлы; существующие правятся точечно (Edit, не Write). | `ideas/`, `entities/`, `domains/`, `questions/`, `_attachments/` |
@@ -92,7 +95,7 @@ Vault разделён на четыре слоя по жизненному ци
 | `lint` | **только** `wiki/meta/lint-reports/lint-state.json` (+ опц. отчёт) | content-файлы — все правки делает `ingest` по `open_issues` из lint-state |
 | `wiki` | Роутер. Сам ничего не пишет, делегирует. | – |
 | `transcribe` | `raw/<имя>.md` (результат конвертации `raw/formats/...`) | `wiki/`, `_attachments/` |
-| `obsidian-bases` | `wiki/meta/dashboards/*.base` | content |
+| `obsidian-bases` | `wiki/meta/dashboards/*.base` (только нешаблонные / разовые правки) | content |
 | `defuddle` | возвращает markdown в stdout — фактическую запись в `raw/` делает пользователь или вызывающий скилл | – |
 
 Скрипты `bin/`:
@@ -103,6 +106,7 @@ Vault разделён на четыре слоя по жизненному ци
 | `bin/lint.py` | `wiki/meta/lint-reports/lint-state.json` | Программные проверки (16 типов issues) + опц. `--approx` для embedding-based. |
 | `bin/knowledge_map.py` | `wiki/meta/kn-maps/knowledge-map-*.md` | Снимок графа знаний. |
 | `bin/transcribe.py` | `raw/<имя>.md` | Конвертация бинарных источников. |
+| `bin/gen_dashboards.py` | `wiki/meta/dashboards/*.base` (только если файла нет) | Генерирует дефолтные дашборды для каждого `wiki/domains/*.md` и глобальный `dashboard.base`. **Запускается Stop-hook'ом** (async, ~100ms). Существующие `.base` не перезаписывает — ручные правки выживают. |
 | `bin/setup-vault.sh`, `bin/setup.sh` | initial scaffold | Однократно при создании vault. |
 
 ---
@@ -174,7 +178,7 @@ raw/source.md
 
 ## 6. Ключевые инварианты
 
-1. **`raw/` иммутабелен.** Источники не редактируются, не удаляются, не переименовываются Claude'ом.
+1. **Существующие файлы в `raw/` не редактируются** Claude'ом. Создание новых файлов допустимо только через `transcribe` при конвертации бинарников из `raw/formats/`. Удаление и переименование источников — только пользователь.
 2. **`cache.md` — overwrite.** Не append. Старая история — в `log.md`.
 3. **`log.md` — append-only.** Новые записи сверху, старое не правится.
 4. **Lint не правит content.** Все фиксы — через `ingest` по `lint-state.json::open_issues`.
