@@ -49,7 +49,7 @@ Lint работает в два слоя плюс опциональный embed
 | `/lint` | Запустить Layer 1 + Layer 2. Skip-check по hash. Если wiki не менялась И нет open_issues — пропуск. |
 | `/lint --force` | Игнорировать skip-check, всегда full audit (оба слоя). |
 | `/lint --fast` | Только Layer 1 (программный), без LLM-фазы. Быстро, но без семантических проверок. |
-| `/lint --approx` | Layer 1 + Layer 1.5 + Layer 2. Подключает embedding-based проверки. Требует предварительного `python3 bin/embed.py update`. |
+| `/lint --approx` | Layer 1 + Layer 1.5 + Layer 2. Подключает embedding-based проверки. Эмбеддинги поддерживает Stop-hook; если их нет (Ollama / модель недоступны) — слой просто пропустится с предупреждением. |
 | `/lint --approx --fast` | Layer 1 + Layer 1.5 без LLM-слоя. Покрывает максимум структурных + семантических нарушений без затрат на LLM. |
 
 **Параметры тонкой настройки `--approx`:**

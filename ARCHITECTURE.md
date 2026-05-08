@@ -99,7 +99,7 @@ Vault разделён на четыре слоя по жизненному ци
 
 | Скрипт | Запись | Назначение |
 |---|---|---|
-| `bin/embed.py` | `wiki/meta/embeddings.json` | Обновляет эмбеддинги для approx-lint. |
+| `bin/embed.py` | `wiki/meta/embeddings.json` | Обновляет эмбеддинги для approx-lint. **Запускается Stop-hook'ом** в `.claude/settings.json` после каждого turn'а — скиллы про это не знают и не вызывают вручную. Hash-skip пропускает неизменённые страницы. |
 | `bin/lint.py` | `wiki/meta/lint-reports/lint-state.json` | Программные проверки (16 типов issues) + опц. `--approx` для embedding-based. |
 | `bin/knowledge_map.py` | `wiki/meta/kn-maps/knowledge-map-*.md` | Снимок графа знаний. |
 | `bin/transcribe.py` | `raw/<имя>.md` | Конвертация бинарных источников. |
@@ -133,9 +133,12 @@ raw/source.md
    │  Phase 7: domain proposal (если порог N=10 пройден)
    │  Phase 8: lint review (опц.)
    ▼
-   bin/embed.py update → embeddings.json
    bin/lint.py [--approx] → lint-state.json
    ingest применяет open_issues (auto-fix / ask / skip)
+   │
+   │  на завершении turn'а Claude — Stop hook:
+   ▼
+   bin/embed.py update → embeddings.json (вне ingest, для следующего turn'а)
 ```
 
 ---

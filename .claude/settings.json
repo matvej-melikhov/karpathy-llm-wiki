@@ -50,6 +50,12 @@
           {
             "type": "command",
             "command": "cd \"$PWD\" && [ -d wiki ] && [ -d .git ] && git diff --name-only HEAD 2>/dev/null | grep -q '^wiki/' && echo 'WIKI_CHANGED: Wiki-страницы были изменены в этой сессии. Пожалуйста, обнови wiki/cache.md краткой сводкой изменений (до 500 слов). Используй формат cache: Последнее обновление, Ключевые факты, Недавние изменения, Активные темы. Будь фактическим. Перезапиши файл целиком. Это кэш, не журнал.' || true"
+          },
+          {
+            "type": "command",
+            "command": "cd \"$PWD\"; [ -f .env ] && { set -a; . ./.env; set +a; }; [ -f bin/embed.py ] && python3 bin/embed.py update >/dev/null 2>&1 || true",
+            "async": true,
+            "timeout": 600
           }
         ]
       }

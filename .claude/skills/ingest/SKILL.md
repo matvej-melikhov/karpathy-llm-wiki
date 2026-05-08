@@ -50,7 +50,7 @@ description: "Загрузка источников в Obsidian wiki-vault. Чи
 | 5 | Связать страницы | frontmatter (sources/related/tags/domain) + inline wikilinks |
 | 6 | Обновить инфраструктуру | index.md (таблица, additive) + log.md (запись сверху, append-only) + cache.md (**overwrite целиком**, ~500 слов) + summary.md (overwrite) |
 | 7 | Domain proposal | Если порог N=10 пройден тегом без domain — предложить создать |
-| 8 | Lint review | (опц.) refresh embeddings → lint (read-only) → применить `open_issues` (auto-fix / ask / skip) |
+| 8 | Lint review | lint (read-only) → применить `open_issues` (auto-fix / ask / skip) |
 
 **Полные детали фаз 1-7:** `references/synthesis-phases.md`.
 **Полные детали Phase 8 + Fix-only:** `references/lint-fix.md`.

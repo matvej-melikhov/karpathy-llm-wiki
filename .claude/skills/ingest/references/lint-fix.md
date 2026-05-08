@@ -17,23 +17,15 @@
 
 ### Шаги
 
-0. **Опционально: освежить эмбеддинги** перед lint, чтобы Layer 1.5 мог отработать на актуальном состоянии:
+> Эмбеддинги освежает Stop-hook (`python3 bin/embed.py update`) на завершении предыдущего turn'а — отдельно их обновлять здесь не нужно. Если `wiki/meta/embeddings.json` отсутствует (Ollama не запущена / модель эмбеддера не установлена) — `--approx` ниже просто упадёт с понятной ошибкой, остальной lint работает без него.
 
-   ```bash
-   python3 bin/embed.py update
-   ```
-
-   Это пересчитает эмбеддинги изменившихся wiki-страниц и нового raw-источника (использует hash-based skip — пропускает неизменённое). Если Ollama не запущена или модель не загружена — команда вернёт код 2 с сообщением. **В этом случае просто пропусти шаг и не используй `--approx` ниже** — остальной lint работает без эмбеддингов.
-
-1. **Вызвать `lint`.** Без флагов — он сам решает, делать ли skip-check; в нашем случае wiki только что менялась, поэтому будет full audit. По завершении в `wiki/meta/lint-reports/lint-state.json` лежит свежий список `open_issues`.
-
-   Если шаг 0 прошёл успешно — добавить флаг `--approx`:
+1. **Вызвать `lint --approx`.** Без флагов — он сам решает, делать ли skip-check; в нашем случае wiki только что менялась, поэтому будет full audit. По завершении в `wiki/meta/lint-reports/lint-state.json` лежит свежий список `open_issues`.
 
    ```bash
    python3 bin/lint.py --approx
    ```
 
-   Это включит embedding-based проверки `similar-but-unlinked` и `synthesis-drift` (см. `.claude/skills/lint/SKILL.md`).
+   Флаг `--approx` включает embedding-based проверки `similar-but-unlinked` и `synthesis-drift` (см. `.claude/skills/lint/SKILL.md`). Если эмбеддингов нет — запусти без `--approx`.
 
 2. **Прочитать `wiki/meta/lint-reports/lint-state.json`.** Получить `open_issues`. Каждый issue имеет поле `type` — категория проверки (см. `.claude/skills/lint/SKILL.md`).
 
