@@ -749,103 +749,23 @@ def check_asymmetric_related(pages: list[Page]) -> Iterable[Issue]:
 # ────────────────────────────────────────────────────────────────────────
 
 
-# Map index-section heading → folder containing those pages.
-_INDEX_SECTION_TO_FOLDER = {
-    "Ideas": "ideas",
-    "Entities": "entities",
-    "Questions": "questions",
-    "Domains": "domains",
-}
-
-
-def _parse_index_tables(index_text: str) -> dict[str, set[str]]:
-    """Parse wiki/index.md into {section_name: set of wikilink targets}.
-
-    Sections are detected by `## <SectionName>` headings matching keys in
-    _INDEX_SECTION_TO_FOLDER. Within each section we look for table rows
-    where the first cell contains a wikilink.
+def check_missing_summary(pages: list[Page]) -> Iterable[Issue]:
+    """Content page (idea/entity/domain/question) without non-empty `summary:`
+    in frontmatter. Required because `wiki/index.md` is auto-generated from
+    this field — page without summary appears in index with placeholder text.
     """
-    result: dict[str, set[str]] = {}
-    current_section: str | None = None
-
-    for line in index_text.split("\n"):
-        # Heading
-        h = re.match(r"^##\s+(.+?)\s*$", line)
-        if h:
-            heading = h.group(1).strip()
-            if heading in _INDEX_SECTION_TO_FOLDER:
-                current_section = heading
-                result.setdefault(current_section, set())
-            else:
-                current_section = None
-            continue
-        if current_section is None:
-            continue
-        # Table row: starts with `|`
-        if not line.lstrip().startswith("|"):
-            continue
-        # Skip separator row: `|---|---|`
-        if re.match(r"^\s*\|[\s\-:|]+\|\s*$", line):
-            continue
-        # Extract first cell content
-        cells = [c.strip() for c in line.split("|") if c.strip()]
-        if not cells:
-            continue
-        first_cell = cells[0]
-        for m in _WIKILINK_RE.finditer(first_cell):
-            result[current_section].add(_normalize_wiki_target(m.group(1).strip()))
-    return result
-
-
-def check_stale_index_entry(pages: list[Page]) -> Iterable[Issue]:
-    """Row in wiki/index.md table whose wikilink resolves to no existing page."""
-    index_path = WIKI_ROOT / "index.md"
-    if not index_path.is_file():
-        return
-    fm, body = parse_frontmatter(index_path.read_text(encoding="utf-8"))
-    by_name = {p.name: p for p in pages}
-
-    sections = _parse_index_tables(body)
-    for section, targets in sections.items():
-        for target in sorted(targets):
-            if target.startswith("raw/"):
-                continue
-            if target not in by_name:
-                yield Issue("stale-index-entry", {
-                    "link": f"[[{target}]]",
-                    "section": section,
-                })
-
-
-def check_missing_index_entry(pages: list[Page]) -> Iterable[Issue]:
-    """Content page exists but no row in wiki/index.md table."""
-    index_path = WIKI_ROOT / "index.md"
-    if not index_path.is_file():
-        return
-    _, body = parse_frontmatter(index_path.read_text(encoding="utf-8"))
-    sections = _parse_index_tables(body)
-
-    # Flatten: set of all names referenced in any section
-    indexed_names: set[str] = set()
-    for targets in sections.values():
-        indexed_names.update(targets)
-
     for p in pages:
+        if p.fm is None:
+            continue
         if p.folder not in CONTENT_FOLDERS:
             continue
-        if p.name in indexed_names:
+        summary = p.fm.fields.get("summary")
+        if isinstance(summary, str) and summary.strip():
             continue
-        # Page exists but missing from index
-        page_type = p.page_type or FOLDER_TO_TYPE.get(p.folder, "")
-        yield Issue("missing-index-entry", {
+        yield Issue("missing-summary", {
             "where": p.relpath(),
-            "page_type": page_type,
+            "page_type": p.page_type or FOLDER_TO_TYPE.get(p.folder, ""),
         })
-
-
-# ────────────────────────────────────────────────────────────────────────
-# Body-structure checks
-# ────────────────────────────────────────────────────────────────────────
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -980,10 +900,7 @@ def _build_canonical_fix(original: str, normalized_target: str) -> str:
     return "[[" + normalized_target + anchor_part + alias_part + "]]"
 
 
-def check_non_canonical_wikilink(
-    pages: list[Page],
-    index_path: Path | None = None,
-) -> Iterable[Issue]:
+def check_non_canonical_wikilink(pages: list[Page]) -> Iterable[Issue]:
     """Wikilink uses path-prefixed form (e.g., [[wiki/ideas/RLHF]]) where the
     canonical form is just the basename ([[RLHF]]).
 
@@ -1001,7 +918,9 @@ def check_non_canonical_wikilink(
     Sources scanned:
     - Page bodies (excluding fenced code and inline code)
     - frontmatter `related:` and `domain:` fields
-    - wiki/index.md table cells
+
+    `wiki/index.md` is NOT scanned — оно генерируется `bin/gen_index.py` из
+    canonical wikilinks по построению.
 
     Skips meta pages (their content is operations log, not knowledge graph).
     """
@@ -1070,40 +989,6 @@ def check_non_canonical_wikilink(
                         "context": f"frontmatter {fld}",
                     })
 
-    # wiki/index.md
-    if index_path is None:
-        index_path = WIKI_ROOT / "index.md"
-    if index_path.is_file():
-        _fm, body = parse_frontmatter(index_path.read_text(encoding="utf-8"))
-        current_section: str | None = None
-        for line_no, line in enumerate(body.split("\n"), start=1):
-            h = re.match(r"^##\s+(.+?)\s*$", line)
-            if h:
-                heading = h.group(1).strip()
-                current_section = heading if heading in _INDEX_SECTION_TO_FOLDER else None
-                continue
-            if current_section is None:
-                continue
-            if not line.lstrip().startswith("|"):
-                continue
-            for m in _WIKILINK_RE.finditer(line):
-                raw_target = m.group(1).strip()
-                if raw_target.startswith("raw/"):
-                    continue
-                if "/" not in raw_target:
-                    continue
-                fix = _build_canonical_fix(m.group(0), _normalize_wiki_target(raw_target))
-                key = ("wiki/index.md", m.group(0))
-                if key in seen:
-                    continue
-                seen.add(key)
-                yield Issue("non-canonical-wikilink", {
-                    "where": "wiki/index.md",
-                    "link": m.group(0),
-                    "fix": fix,
-                    "context": f"index section {current_section}",
-                })
-
 
 def check_folder_type_mismatch(pages: list[Page]) -> Iterable[Issue]:
     """Page in wiki/<X>/ must have type: matching the folder."""
@@ -1137,8 +1022,7 @@ _CHECKS: list[tuple[str, Any]] = [
     ("orphan", check_orphan),
     ("asymmetric-related", check_asymmetric_related),
     ("dangling-domain-ref", check_dangling_domain_ref),
-    ("stale-index-entry", check_stale_index_entry),
-    ("missing-index-entry", check_missing_index_entry),
+    ("missing-summary", check_missing_summary),
     ("empty-section", check_empty_section),
     ("binary-source-outside-formats", check_binary_source_outside_formats),
 ]

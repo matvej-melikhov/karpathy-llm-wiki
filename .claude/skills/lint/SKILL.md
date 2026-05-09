@@ -22,7 +22,7 @@ Lint **только читает** wiki и записывает структур
 
 Lint работает в два слоя плюс опциональный embedding-based слой:
 
-**Layer 1 — программная проверка (`bin/lint.py`).** Python-скрипт, реализующий все детерминистические проверки: 16 типов issues. Запускается за секунды, без LLM-стоимости. Пишет `lint-state.json` с найденными `open_issues`.
+**Layer 1 — программная проверка (`bin/lint.py`).** Python-скрипт, реализующий все детерминистические проверки: 15 типов issues. Запускается за секунды, без LLM-стоимости. Пишет `lint-state.json` с найденными `open_issues`.
 
 **Layer 1.5 — embedding-based (опционально, `--approx`).** Те же `bin/lint.py`, но с флагом `--approx` подключаются проверки на основе предварительно посчитанных эмбеддингов: `similar-but-unlinked` (semantic missing links) и `synthesis-drift` (детектор отклонения синтеза от источников). Чистые потребители векторов — embedding-сервер (Ollama или LMStudio через OpenAI-совместимый API) не нужен для lint, только `bin/embed.py update` должен быть выполнен заранее.
 
@@ -213,9 +213,9 @@ domain:
 | `raw-ref-in-body` | упоминание `[[raw/...]]` в теле страницы | `{type, where, link, line}` |
 | `empty-sources-section` | секция `## Источники`/`## Источники упоминания` содержит только `[[raw/...]]` | `{type, where, section}` |
 | `folder-type-mismatch` | страница лежит в `wiki/<X>/`, но `type:` во frontmatter не соответствует папке | `{type, where, current_type, expected_type}` |
-| `stale-index-entry` | строка в `wiki/index.md` ссылается на несуществующую страницу (была удалена/переименована) | `{type, link, section}` |
-| `non-canonical-wikilink` | wikilink использует path-prefixed форму (`[[wiki/ideas/RLHF]]`, `[[ideas/RLHF]]`) вместо канонической basename `[[RLHF]]`. raw/-ссылки не флагируются. Auto-fix сохраняет `#section\|alias` части | `{type, where, link, fix, context}` |
+| `non-canonical-wikilink` | wikilink использует path-prefixed форму (`[[wiki/ideas/RLHF]]`, `[[ideas/RLHF]]`) вместо канонической basename `[[RLHF]]`. raw/-ссылки и `wiki/index.md` не сканируются (index автогенерируется с canonical links). Auto-fix сохраняет `#section\|alias` части | `{type, where, link, fix, context}` |
 | `domain-order` | LLM-проверка (Layer 2): `domain:` не упорядочен от частного к общему. Агент использует семантическое знание о соотношении доменов (`RL ⊂ ML`). Auto-fix переписывает блок в порядке из `expected`. Параллельные домены (без иерархии) агент пропускает | `{type, where, current, expected, reasoning}` |
+| `missing-summary` | content-страница (idea/entity/domain/question) без непустого `summary:` во frontmatter. Auto-fix: ingest читает первый абзац, генерирует декларативное саммари ≤120 символов и вставляет в frontmatter. На следующем Stop-hook'е `bin/gen_index.py` подхватит саммари в `wiki/index.md` | `{type, where, page_type}` |
 
 ### Ask user (ingest спрашивает решение)
 
@@ -228,7 +228,6 @@ domain:
 | `missing-concept` | концепция упомянута в ≥3 страницах без своей wiki-страницы | `{type, term, mentioned_in: [...]}` |
 | `contradiction` | противоречие между утверждениями двух страниц | `{type, page_a, page_b, claim}` |
 | `outdated-claim` | утверждение в `[[A]]` потенциально опровергнуто `[[B]]` | `{type, where, claim, conflicts_with}` |
-| `missing-index-entry` | content-страница (idea/entity/question/domain) существует в файлах, но строка о ней отсутствует в `wiki/index.md` | `{type, where, page_type}` |
 | `dangling-domain-ref` | страница имеет в `domain:` frontmatter ссылку на несуществующую domain-страницу | `{type, where, missing_domain}` |
 | `asymmetric-related` | у страницы `[[A]]` в `related:` есть `[[B]]`, но у `[[B]]` в `related:` нет `[[A]]` | `{type, page_a, page_b}` |
 | `binary-source-outside-formats` | бинарный файл (.pdf/.docx/audio) лежит в `raw/` вне папки `raw/formats/` | `{type, where, suggested}` |
