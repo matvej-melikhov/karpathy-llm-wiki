@@ -109,6 +109,7 @@ Vault разделён на четыре слоя по жизненному ци
 | `bin/transcribe.py` | `raw/<имя>.md` | Конвертация бинарных источников. |
 | `bin/gen_dashboards.py` | `wiki/meta/dashboards/*.base` (только если файла нет) | Генерирует дефолтные дашборды для каждого `wiki/domains/*.md` и глобальный `dashboard.base`. **Запускается Stop-hook'ом** (async, ~100ms). Существующие `.base` не перезаписывает — ручные правки выживают. |
 | `bin/gen_index.py` | `wiki/index.md` (полная перезапись) | Обходит `wiki/{ideas,entities,domains,questions}/`, читает `summary:` из frontmatter, формирует таблицы. Шапка зашита в скрипте. **Запускается Stop-hook'ом** (async, ~150ms на ~50 страниц). Полная перезапись каждый раз — index стабильно отражает текущее состояние frontmatter. |
+| `bin/rename_wiki_page.py` | wiki-/raw-страница (rename/move) + все wikilinks на неё | Безопасное переименование/перемещение страницы или raw-источника. Сначала обновляет canonical wikilinks (`[[X]]`, `[[X#anchor]]`, `[[X\|alias]]`, `![[X]]`) во всех `.md` под `wiki/` и `raw/`, потом делает `mv`. Для raw — точный match по полному relpath. Cross-root запрещён. Существующий target → exit 1. **Используется Claude'ом каждый раз когда нужно rename/move страницу** — прямой `mv`/`Write` запрещён инвариантом 10. |
 | `bin/setup-vault.sh`, `bin/setup.sh` | initial scaffold | Однократно при создании vault. |
 
 ---
@@ -190,6 +191,7 @@ raw/source.md
 7. **Wikilinks — единственный способ связи.** Никаких сырых путей к страницам в теле текста.
 8. **Domain создаётся по порогу.** Тег с N≥10 страницами → предложение создать `domains/<name>.md`. Меньше — просто тег.
 9. **Provenance в `log.md`.** Каждый ingest/save оставляет запись в `log.md` с указанием источника, созданных и обновлённых страниц.
+10. **Rename/move — только через `bin/rename_wiki_page.py`.** Прямой `Bash mv`, `Write` на новый путь или ручное переименование через файловый менеджер ломают wikilinks (Claude не запускает Obsidian — встроенный auto-rename Obsidian'а не сработает). Скрипт сначала обновляет canonical-ссылки на странице, потом делает `mv`. Этот инвариант распространяется на wiki-страницы И raw-источники.
 
 ---
 

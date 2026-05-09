@@ -122,6 +122,25 @@ YYYY-MM-DD. [что произошло — 2-4 предложения, что in
 
 ---
 
+## Rename и move страниц
+
+Когда нужно переименовать wiki-страницу (`wiki/ideas/X.md` → `wiki/ideas/Y.md`) или переместить raw-источник (`raw/X.pdf` → `raw/formats/X.pdf`) — **используй только `bin/rename_wiki_page.py`**:
+
+```bash
+python3 bin/rename_wiki_page.py <old_path> <new_path>
+```
+
+Скрипт сначала обновляет все canonical-wikilinks на старое имя (включая formы `[[X]]`, `[[X#anchor]]`, `[[X|alias]]`, `![[X]]`) во всех `.md` под `wiki/` и `raw/`, потом делает `mv`. Cross-root запрещён (нельзя переехать из `wiki/` в `raw/` и обратно). Существующий target-файл → exit 1, ничего не двигается.
+
+**Что не делать:**
+- Прямой `Bash mv old new` — wikilinks остаются протухшими, lint выдаст пачку `dead-link`.
+- `Write` нового файла + `Bash rm` старого — то же самое, плюс лишняя работа.
+- Через Obsidian UI — это работает (Obsidian сам обновляет ссылки), но Claude не запускает Obsidian, поэтому для агентских правок этот путь недоступен.
+
+Скрипт работает только с canonical-формой ссылок. Если в vault'е есть legacy non-canonical (`[[wiki/ideas/Old]]`, `[[raw/X.md]]`) — они **не обновятся** скриптом. Это работа `lint` (`non-canonical-wikilink`, `raw-link-with-extension` — auto-fix). Если такие появились — следующий `/lint` + ingest fix-only их зачистит.
+
+---
+
 ## Кросс-проектное использование
 
 В CLAUDE.md другого проекта добавь:
