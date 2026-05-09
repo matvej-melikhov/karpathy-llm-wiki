@@ -48,7 +48,7 @@ description: "Загрузка источников в Obsidian wiki-vault. Чи
 | 3 | Решить гранулярность | Для каждой единицы — будет ли своя страница (критерии в reference) |
 | 4 | Написать или обновить | Создать новую (по шаблону) или дополнить существующую |
 | 5 | Связать страницы | frontmatter (sources/related/tags/domain) + inline wikilinks |
-| 6 | Обновить инфраструктуру | index.md (таблица, additive) + log.md (запись сверху, append-only) + cache.md (**overwrite целиком**, ~500 слов) + summary.md (overwrite) |
+| 6 | Обновить инфраструктуру | log.md (запись сверху, append-only) + cache.md (**overwrite целиком**, ~500 слов) + summary.md (overwrite). `wiki/index.md` **не трогать** — генерируется автоматически из `summary:` во frontmatter каждой страницы (см. ниже). |
 | 7 | Domain proposal | Если порог N=10 пройден тегом без domain — предложить создать |
 | 8 | Lint review | lint (read-only) → применить `open_issues` (auto-fix / ask / skip) |
 

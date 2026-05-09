@@ -46,7 +46,7 @@ Vault разделён на четыре слоя по жизненному ци
 
 | Путь | Назначение | Семантика записи |
 |---|---|---|
-| `wiki/index.md` | Каталог всех страниц с одно-предложенными саммари. Точка входа для query/ingest. | additive + правка |
+| `wiki/index.md` | Каталог всех страниц с одно-предложенными саммари. Точка входа для query/ingest. **Генерируется автоматически** из `summary:` во frontmatter каждой страницы. | generated |
 | `wiki/log.md` | Хронологический журнал операций. Новые записи **сверху**. Не сжимается. | append-only |
 | `wiki/cache.md` | Горячий кэш ~500 слов: «где остановились». Бюджет hard-cap 700 слов. | **overwrite целиком** |
 | `wiki/summary.md` | Обзор vault (счётчики, домены, статус). | overwrite |
@@ -65,6 +65,7 @@ Vault разделён на четыре слоя по жизненному ци
 | `wiki/meta/lint-reports/lint-report-YYYY-MM-DD.md` | Человеко-читаемый отчёт (опц.). | `lint` (по запросу) |
 | `wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD.md` | Снимок графа знаний (плотность связей, кластеры). | `bin/knowledge_map.py` |
 | `wiki/meta/dashboards/<Domain>.base`, `dashboard.base` | Obsidian Bases-файлы. Дефолтные шаблоны генерируются скриптом; ручные правки сохраняются. | `bin/gen_dashboards.py` (create-only); `obsidian-bases` (для нешаблонных Bases) |
+| `wiki/index.md` | Каталог wiki: таблицы Ideas / Entities / Domains / Questions, формируются из `summary:` во frontmatter каждой страницы. Полная перезапись каждый Stop. | `bin/gen_index.py` |
 
 **Семантика:** все эти артефакты **derivable** — могут быть пересчитаны из контента. Их безопасно удалять. В `.gitignore` обычно входит `embeddings.json` (большой бинарный JSON).
 
@@ -89,8 +90,8 @@ Vault разделён на четыре слоя по жизненному ци
 
 | Скилл | Пишет | Не пишет |
 |---|---|---|
-| `ingest` | `wiki/{ideas,entities,domains}/`, `wiki/{cache,index,log,summary}.md`, `_attachments/` | `raw/`, lint-state, `questions/` |
-| `save` | `wiki/questions/`, `wiki/{cache,index,log}.md` | `ideas/`, `entities/` (это область ingest), lint-state |
+| `ingest` | `wiki/{ideas,entities,domains}/` (включая `summary:` во frontmatter), `wiki/{cache,log,summary}.md`, `_attachments/` | `raw/`, lint-state, `questions/`, **`wiki/index.md` (генерируется скриптом)** |
+| `save` | `wiki/questions/` (включая `summary:`), `wiki/{cache,log}.md` | `ideas/`, `entities/` (это область ingest), lint-state, **`wiki/index.md`** |
 | `query` | (опц.) `wiki/questions/` через делегирование на save, обновляет `cache.md` после значимых ответов | content-страницы напрямую |
 | `lint` | **только** `wiki/meta/lint-reports/lint-state.json` (+ опц. отчёт) | content-файлы — все правки делает `ingest` по `open_issues` из lint-state |
 | `wiki` | Роутер. Сам ничего не пишет, делегирует. | – |
@@ -107,6 +108,7 @@ Vault разделён на четыре слоя по жизненному ци
 | `bin/knowledge_map.py` | `wiki/meta/kn-maps/knowledge-map-*.md` | Снимок графа знаний. |
 | `bin/transcribe.py` | `raw/<имя>.md` | Конвертация бинарных источников. |
 | `bin/gen_dashboards.py` | `wiki/meta/dashboards/*.base` (только если файла нет) | Генерирует дефолтные дашборды для каждого `wiki/domains/*.md` и глобальный `dashboard.base`. **Запускается Stop-hook'ом** (async, ~100ms). Существующие `.base` не перезаписывает — ручные правки выживают. |
+| `bin/gen_index.py` | `wiki/index.md` (полная перезапись) | Обходит `wiki/{ideas,entities,domains,questions}/`, читает `summary:` из frontmatter, формирует таблицы. Шапка зашита в скрипте. **Запускается Stop-hook'ом** (async, ~150ms на ~50 страниц). Полная перезапись каждый раз — index стабильно отражает текущее состояние frontmatter. |
 | `bin/setup-vault.sh`, `bin/setup.sh` | initial scaffold | Однократно при создании vault. |
 
 ---
@@ -131,8 +133,9 @@ raw/source.md
    │  Phase 5: связи (frontmatter + inline wikilinks)
    │  Phase 6: инфраструктура
    ▼
-   обновляет: wiki/index.md (append таблица), wiki/log.md (запись сверху),
-              wiki/cache.md (overwrite), wiki/summary.md (counters)
+   обновляет: wiki/log.md (запись сверху), wiki/cache.md (overwrite),
+              wiki/summary.md (counters). wiki/index.md обновится автоматически
+              на Stop-hook'е через bin/gen_index.py из `summary:` во frontmatter.
    │
    │  Phase 7: domain proposal (если порог N=10 пройден)
    │  Phase 8: lint review (опц.)

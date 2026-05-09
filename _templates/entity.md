@@ -1,5 +1,6 @@
 ---
 type: entity
+summary: ""
 entity_type: person
 role: ""
 created: <% tp.date.now("YYYY-MM-DD") %>

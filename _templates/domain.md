@@ -1,5 +1,6 @@
 ---
 type: domain
+summary: ""
 created: <% tp.date.now("YYYY-MM-DD") %>
 updated: <% tp.date.now("YYYY-MM-DD") %>
 tags: []
@@ -19,29 +20,7 @@ related: []
 
 ## Все страницы домена
 
-<!-- Создай файл `wiki/meta/dashboards/<% tp.file.title %>.base` со следующим содержимым,
-     затем embed через `![[<% tp.file.title %>.base]]` (Obsidian резолвит
-     по уникальному basename, путь не нужен).
-
-filters:
-  and:
-    - file.inFolder("wiki/")
-    - file.hasLink("<% tp.file.title %>")
-    - not:
-        - file.inFolder("wiki/domains/")
-        - file.inFolder("wiki/meta/")
-views:
-  - type: table
-    name: "Все страницы"
-    order:
-      - file.name
-      - type
-      - status
-      - tags
-      - updated
-    groupBy:
-      property: type
-      direction: ASC
--->
+<!-- `<% tp.file.title %>.base` создаётся автоматически из bin/gen_dashboards.py
+     при следующем Stop-хуке. Embed ниже резолвится по уникальному basename. -->
 
 ![[<% tp.file.title %>.base]]

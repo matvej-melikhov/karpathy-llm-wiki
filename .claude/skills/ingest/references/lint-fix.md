@@ -53,6 +53,8 @@
 
 ## Auto-fix правки
 
+> **Note:** `wiki/index.md` теперь автогенерируется из `summary:` во frontmatter скриптом `bin/gen_index.py`. Issues `stale-index-entry`, `missing-index-entry` и `non-canonical-wikilink in index section` физически невозможны после миграции — script всегда генерирует канонические links и iterirовать может только по реальным файлам. Если такой issue всё-таки пришёл — значит, lint.py не успел увидеть свежий index после Stop-hook'а; правильное действие — игнорировать, на следующем тике index обновится. Не редактируй `index.md` руками.
+
 Применяются молча, без вопросов:
 
 | `type` | Правка |

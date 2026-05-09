@@ -62,6 +62,12 @@
             "command": "cd \"$PWD\"; [ -f bin/gen_dashboards.py ] && python3 bin/gen_dashboards.py >/dev/null 2>&1 || true",
             "async": true,
             "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "cd \"$PWD\"; [ -f bin/gen_index.py ] && python3 bin/gen_index.py >/dev/null 2>&1 || true",
+            "async": true,
+            "timeout": 60
           }
         ]
       }
