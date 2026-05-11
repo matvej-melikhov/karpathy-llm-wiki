@@ -46,6 +46,8 @@ LINT_STATE_PATH = WIKI_ROOT / "meta" / "lint-reports" / "lint-state.json"
 RAW_ROOT = Path("raw")
 RAW_FORMATS_DIR = RAW_ROOT / "formats"
 
+TEMPLATES_DIR = Path("_templates")
+
 # Binary extensions that should live in raw/formats/, not raw/ root
 BINARY_SOURCE_EXTENSIONS = {
     ".pdf", ".docx", ".doc",
@@ -317,22 +319,120 @@ class Issue:
 
 
 def check_status_not_in_enum(pages: list[Page]) -> Iterable[Issue]:
-    """status: must be one of evaluation/in-progress/ready (when present and
-    not on entity)."""
+    """status: must be one of evaluation/in-progress/ready (when present).
+
+    Entity pages are skipped — `status` doesn't belong there at all per
+    template, and `check_invalid_fields` will flag it as an extra field
+    (correct fix: remove, not change-to-valid-value).
+    """
     for p in pages:
         if p.fm is None:
             continue
+        if p.page_type == "entity":
+            continue
         status = p.fm.fields.get("status")
         if status is None:
-            continue
-        # entity has its own check that says status shouldn't even be there
-        if p.page_type == "entity":
             continue
         if status not in VALID_STATUSES:
             yield Issue("status-not-in-enum", {
                 "where": p.relpath(),
                 "value": status,
                 "fix": "in-progress",
+            })
+
+
+def _parse_raw_yaml_entries(fm_text: str) -> dict[str, str]:
+    """Parse frontmatter into {field_name: raw full entry text}.
+
+    Raw entry preserves the exact form from source (single-line `k: v` or
+    multi-line block list). Used both for detection (fields = .keys()) and
+    for missing-field auto-fix (paste raw entry into target page).
+    """
+    entries: dict[str, str] = {}
+    current_key: str | None = None
+    current_lines: list[str] = []
+    for line in fm_text.split("\n"):
+        # Top-level key: starts at column 0 with letter/underscore and has ':'
+        if line and line[0] not in " \t-#" and ":" in line:
+            if current_key is not None:
+                entries[current_key] = "\n".join(current_lines).rstrip()
+            key, _, _ = line.partition(":")
+            current_key = key.strip()
+            current_lines = [line]
+        else:
+            if current_key is not None:
+                current_lines.append(line)
+    if current_key is not None:
+        entries[current_key] = "\n".join(current_lines).rstrip()
+    return entries
+
+
+def _load_template_schemas() -> dict[str, dict[str, str]]:
+    """Read `_templates/<type>.md`, return type → {field: raw full entry}.
+
+    Source of truth for `check_invalid_fields` (detection uses keys) and
+    for missing-field auto-fix (uses the raw entry as default).
+
+    Returns empty dict if templates directory is missing (degrade
+    gracefully — invalid-fields just won't fire).
+    """
+    schemas: dict[str, dict[str, str]] = {}
+    if not TEMPLATES_DIR.is_dir():
+        return schemas
+    for tmpl in sorted(TEMPLATES_DIR.glob("*.md")):
+        try:
+            text = tmpl.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        m = _FRONTMATTER_RE.match(text)
+        if not m:
+            continue
+        schemas[tmpl.stem] = _parse_raw_yaml_entries(m.group(1))
+    return schemas
+
+
+def check_invalid_fields(pages: list[Page]) -> Iterable[Issue]:
+    """Frontmatter has fields not in template (extra) or missing fields
+    from template. Source of truth — `_templates/<type>.md`.
+
+    Emits two subtypes:
+    - `subtype: "extra"` — field is in page frontmatter but not in template
+    - `subtype: "missing"` — field is in template but not in page
+
+    Skips:
+    - meta pages (no template, structure is operation-driven)
+    - pages with unknown `type:` (no matching template)
+    - `summary` for `subtype: "missing"` — covered by `check_missing_summary`
+      with agent-fix that generates content (vs script-fix here which would
+      just add empty placeholder)
+    """
+    schemas = _load_template_schemas()
+    for p in pages:
+        if p.fm is None:
+            continue
+        ptype = p.page_type
+        if ptype is None or ptype == "meta":
+            continue
+        type_schema = schemas.get(ptype)
+        if type_schema is None:
+            continue  # no template for this type
+        expected = set(type_schema.keys())
+        actual = set(p.fm.fields.keys())
+
+        for extra in sorted(actual - expected):
+            yield Issue("invalid-fields", {
+                "where": p.relpath(),
+                "subtype": "extra",
+                "field": extra,
+            })
+
+        for missing in sorted(expected - actual):
+            if missing == "summary":
+                continue  # has its own check (check_missing_summary)
+            yield Issue("invalid-fields", {
+                "where": p.relpath(),
+                "subtype": "missing",
+                "field": missing,
             })
 
 
@@ -845,9 +945,273 @@ def check_folder_type_mismatch(pages: list[Page]) -> Iterable[Issue]:
             })
 
 
+# ────────────────────────────────────────────────────────────────────────
+# Auto-fix functions
+# ────────────────────────────────────────────────────────────────────────
+#
+# For each script-fixable issue type, a pure text mutator
+# `(content, payload) -> new_content`. The I/O wrapper `_apply_text_fix`
+# reads the file, calls the mutator, writes if changed.
+#
+# `binary-source-outside-formats` is special: it's an inter-file move
+# (uses `bin/rename_wiki_page.py` subprocess), not a within-file mutation.
+#
+# Issue types NOT in FIX_HANDLERS stay in `open_issues` as-is — they
+# need agent or user intervention (missing-summary, ask-issues, etc.).
+# ────────────────────────────────────────────────────────────────────────
+
+
+def _split_frontmatter(content: str) -> tuple[str | None, str]:
+    """Return (fm_inner, body_with_delim_stripped). (None, content) if no FM.
+
+    To recombine: `_join_frontmatter(fm_inner, body)`.
+    """
+    m = _FRONTMATTER_RE.match(content)
+    if not m:
+        return None, content
+    return m.group(1), content[m.end():]
+
+
+def _join_frontmatter(fm_inner: str, body: str) -> str:
+    return f"---\n{fm_inner}\n---\n{body}"
+
+
+def _remove_yaml_field(fm: str, field: str) -> str:
+    """Drop a top-level field (and its multi-line continuation) from raw FM."""
+    lines = fm.split("\n")
+    result: list[str] = []
+    in_target = False
+    for line in lines:
+        is_top_level = bool(line) and line[0] not in " \t-#" and ":" in line
+        if is_top_level:
+            key = line.partition(":")[0].strip()
+            in_target = (key == field)
+            if in_target:
+                continue
+        if in_target:
+            continue
+        result.append(line)
+    return "\n".join(result)
+
+
+_TEMPLATER_DATE_RE = re.compile(r"<%\s*tp\.date\.now\([^)]*\)\s*%>")
+_TEMPLATER_TITLE_RE = re.compile(r"<%\s*tp\.file\.title\s*%>")
+
+
+def _resolve_templater(raw: str, page_title: str = "") -> str:
+    """Replace Templater placeholders with concrete values."""
+    today = dt.date.today().isoformat()
+    raw = _TEMPLATER_DATE_RE.sub(today, raw)
+    raw = _TEMPLATER_TITLE_RE.sub(page_title, raw)
+    return raw
+
+
+# ── Per-issue-type mutators ─────────────────────────────────────────────
+
+
+def _fix_status_not_in_enum_in_text(content: str, payload: dict) -> str:
+    fm, body = _split_frontmatter(content)
+    if fm is None:
+        return content
+    new_fm = re.sub(
+        r"^status:\s*.*$",
+        f"status: {payload['fix']}",
+        fm,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    return _join_frontmatter(new_fm, body)
+
+
+def _fix_folder_type_mismatch_in_text(content: str, payload: dict) -> str:
+    fm, body = _split_frontmatter(content)
+    if fm is None:
+        return content
+    new_fm = re.sub(
+        r"^type:\s*.*$",
+        f"type: {payload['expected_type']}",
+        fm,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    return _join_frontmatter(new_fm, body)
+
+
+def _fix_inline_tags_in_text(content: str, payload: dict) -> str:
+    fm, body = _split_frontmatter(content)
+    if fm is None:
+        return content
+    m = re.search(r"^tags:\s*\[(.*)\]\s*$", fm, re.MULTILINE)
+    if not m:
+        return content
+    raw_items = [x.strip() for x in m.group(1).split(",") if x.strip()]
+    cleaned: list[str] = []
+    for x in raw_items:
+        if (x.startswith('"') and x.endswith('"')) or (x.startswith("'") and x.endswith("'")):
+            cleaned.append(x[1:-1])
+        else:
+            cleaned.append(x)
+    if not cleaned:
+        replacement = "tags: []"
+    else:
+        replacement = "tags:\n" + "\n".join(f"  - {x}" for x in cleaned)
+    new_fm = fm[: m.start()] + replacement + fm[m.end():]
+    return _join_frontmatter(new_fm, body)
+
+
+def _fix_non_canonical_wikilink_in_text(content: str, payload: dict) -> str:
+    """Replace literal link text with canonical fix everywhere in file."""
+    return content.replace(payload["link"], payload["fix"])
+
+
+def _fix_raw_link_with_extension_in_text(content: str, payload: dict) -> str:
+    """[[raw/X.md]] → [[raw/X]] (strip trailing .md before ]])."""
+    link = payload["link"]
+    fix = re.sub(r"\.md\]\]$", "]]", link)
+    if fix == link:
+        return content
+    return content.replace(link, fix)
+
+
+def _fix_raw_ref_in_body_in_text(content: str, payload: dict) -> str:
+    """Remove the wikilink occurrence from body text. Frontmatter untouched."""
+    fm, body = _split_frontmatter(content)
+    if fm is None:
+        return content
+    link = payload["link"]
+    # Replace ` link ` (with surrounding space) with single space, then any
+    # remaining bare occurrence with empty. Keep it simple — most real cases
+    # are inline mentions.
+    new_body = body.replace(f" {link}", "").replace(link, "")
+    if new_body == body:
+        return content
+    return _join_frontmatter(fm, new_body)
+
+
+def _fix_invalid_fields_extra_in_text(content: str, payload: dict) -> str:
+    fm, body = _split_frontmatter(content)
+    if fm is None:
+        return content
+    new_fm = _remove_yaml_field(fm, payload["field"])
+    return _join_frontmatter(new_fm, body)
+
+
+def _fix_invalid_fields_missing_in_text(
+    content: str,
+    payload: dict,
+    schemas: dict[str, dict[str, str]] | None = None,
+    page_title: str = "",
+) -> str:
+    fm, body = _split_frontmatter(content)
+    if fm is None:
+        return content
+    # Identify page type from frontmatter
+    type_match = re.search(r"^type:\s*(.+?)\s*$", fm, re.MULTILINE)
+    if not type_match:
+        return content
+    ptype = type_match.group(1).strip()
+    if schemas is None:
+        schemas = _load_template_schemas()
+    type_schema = schemas.get(ptype)
+    if not type_schema:
+        return content
+    raw_entry = type_schema.get(payload["field"])
+    if raw_entry is None:
+        return content
+    resolved = _resolve_templater(raw_entry, page_title=page_title)
+    new_fm = fm.rstrip("\n") + "\n" + resolved
+    return _join_frontmatter(new_fm, body)
+
+
+# ── I/O wrapper and dispatcher ─────────────────────────────────────────
+
+
+def _apply_text_fix(payload: dict, mutator: Any) -> bool:
+    """Read file at payload['where'], apply mutator, write if changed."""
+    path = Path(payload["where"])
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    new_content = mutator(content, payload)
+    if new_content == content:
+        return False
+    path.write_text(new_content, encoding="utf-8")
+    return True
+
+
+def _fix_invalid_fields(payload: dict) -> bool:
+    """Subtype-aware dispatch for invalid-fields issues."""
+    subtype = payload.get("subtype")
+    if subtype == "extra":
+        return _apply_text_fix(payload, _fix_invalid_fields_extra_in_text)
+    if subtype == "missing":
+        path = Path(payload["where"])
+        page_title = path.stem
+        schemas = _load_template_schemas()
+
+        def mutator(content: str, p: dict) -> str:
+            return _fix_invalid_fields_missing_in_text(
+                content, p, schemas=schemas, page_title=page_title
+            )
+
+        return _apply_text_fix(payload, mutator)
+    return False
+
+
+def _fix_binary_source_outside_formats(payload: dict) -> bool:
+    """Subprocess to bin/rename_wiki_page.py (handles wikilink updates + mv)."""
+    import subprocess
+    where = payload["where"]
+    suggested = payload["suggested"]
+    script = Path(__file__).resolve().parent / "rename_wiki_page.py"
+    result = subprocess.run(
+        ["python3", str(script), where, suggested],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+FIX_HANDLERS: dict[str, Any] = {
+    "status-not-in-enum": lambda p: _apply_text_fix(p, _fix_status_not_in_enum_in_text),
+    "invalid-fields": _fix_invalid_fields,
+    "inline-tags": lambda p: _apply_text_fix(p, _fix_inline_tags_in_text),
+    "non-canonical-wikilink": lambda p: _apply_text_fix(p, _fix_non_canonical_wikilink_in_text),
+    "folder-type-mismatch": lambda p: _apply_text_fix(p, _fix_folder_type_mismatch_in_text),
+    "raw-link-with-extension": lambda p: _apply_text_fix(p, _fix_raw_link_with_extension_in_text),
+    "raw-ref-in-body": lambda p: _apply_text_fix(p, _fix_raw_ref_in_body_in_text),
+    "binary-source-outside-formats": _fix_binary_source_outside_formats,
+}
+
+
+def apply_auto_fixes(issues: list[Issue]) -> tuple[list[Issue], int]:
+    """Try to apply auto-fix for each issue. Return (remaining, fixed_count).
+
+    Issues without a handler stay in `remaining`. Failed fixes (handler
+    returned False or raised) also stay — they'll be retried next /lint.
+    """
+    remaining: list[Issue] = []
+    fixed = 0
+    for issue in issues:
+        handler = FIX_HANDLERS.get(issue.type)
+        if handler is None:
+            remaining.append(issue)
+            continue
+        try:
+            if handler(issue.payload):
+                fixed += 1
+            else:
+                remaining.append(issue)
+        except Exception:
+            remaining.append(issue)
+    return remaining, fixed
+
+
 # Registry: ordered list of (issue_type_string, check_function)
 _CHECKS: list[tuple[str, Any]] = [
     ("status-not-in-enum", check_status_not_in_enum),
+    ("invalid-fields", check_invalid_fields),
     ("inline-tags", check_inline_tags),
     ("non-canonical-wikilink", check_non_canonical_wikilink),
     ("folder-type-mismatch", check_folder_type_mismatch),
@@ -1247,21 +1611,33 @@ def main() -> int:
 
     issues = run_all_checks(pages, filter_type=args.check, extra_checks=extra_checks)
 
+    # Apply script auto-fixes inline. Anything not script-fixable (agent fix
+    # or ask-issue) stays in `remaining` and is written to lint-state.json.
+    remaining, fixed = apply_auto_fixes(issues)
+
+    if fixed:
+        # Re-discover and re-hash because file contents changed
+        pages = discover_pages()
+        wiki_hash = compute_wiki_hash(pages)
+
     new_state: dict[str, Any] = {
         "wiki_hash": wiki_hash,
         "last_audit": dt.datetime.now().isoformat(timespec="seconds"),
         "files_checked": len(pages),
-        "open_issues": [iss.to_dict() for iss in issues],
+        "open_issues": [iss.to_dict() for iss in remaining],
     }
     if contradiction_candidates:
         new_state["contradiction_candidates"] = contradiction_candidates
     save_lint_state(new_state)
 
-    print(f"checked {len(pages)} pages, found {len(issues)} open issues")
+    print(
+        f"checked {len(pages)} pages, fixed {fixed}, "
+        f"{len(remaining)} remaining"
+    )
     if args.json:
         print(json.dumps(new_state, ensure_ascii=False, indent=2))
 
-    return 1 if issues else 0
+    return 1 if remaining else 0
 
 
 if __name__ == "__main__":

@@ -93,7 +93,7 @@ Vault разделён на четыре слоя по жизненному ци
 | `ingest` | `wiki/{ideas,entities,domains}/` (включая `summary:` во frontmatter), `wiki/{cache,log,summary}.md`, `_attachments/` | `raw/`, lint-state, `questions/`, **`wiki/index.md` (генерируется скриптом)** |
 | `save` | `wiki/questions/` (включая `summary:`), `wiki/{cache,log}.md` | `ideas/`, `entities/` (это область ingest), lint-state, **`wiki/index.md`** |
 | `query` | (опц.) `wiki/questions/` через делегирование на save, обновляет `cache.md` после значимых ответов | content-страницы напрямую |
-| `lint` | **только** `wiki/meta/lint-reports/lint-state.json` (+ опц. отчёт) | content-файлы — все правки делает `ingest` по `open_issues` из lint-state |
+| `lint` | `wiki/meta/lint-reports/lint-state.json` (+ опц. отчёт), а также **content-файлы для script auto-fixes** (через `bin/static_lint.py`) | агентские правки (`missing-summary`) и ask-issues — не делает сам |
 | `wiki` | Роутер. Сам ничего не пишет, делегирует. | – |
 | `transcribe` | `raw/<имя>.md` (результат конвертации `raw/formats/...`) | `wiki/`, `_attachments/` |
 | `obsidian-bases` | `wiki/meta/dashboards/*.base` (только нешаблонные / разовые правки) | content |
@@ -104,7 +104,7 @@ Vault разделён на четыре слоя по жизненному ци
 | Скрипт | Запись | Назначение |
 |---|---|---|
 | `bin/embed.py` | `wiki/meta/embeddings.json` | Обновляет эмбеддинги для approx-lint. **Запускается Stop-hook'ом** в `.claude/settings.json` после каждого turn'а — скиллы про это не знают и не вызывают вручную. Hash-skip пропускает неизменённые страницы. |
-| `bin/static_lint.py` | `wiki/meta/lint-reports/lint-state.json` | Программные проверки (12 типов issues) + опц. `--approx` для embedding-based. |
+| `bin/static_lint.py` | `wiki/meta/lint-reports/lint-state.json` | Программные проверки (13 типов issues) + опц. `--approx` для embedding-based. |
 | `bin/knowledge_map.py` | `wiki/meta/kn-maps/knowledge-map-*.md` | Снимок графа знаний. |
 | `bin/transcribe.py` | `raw/<имя>.md` | Конвертация бинарных источников. |
 | `bin/gen_dashboards.py` | `wiki/meta/dashboards/*.base` (только если файла нет) | Генерирует дефолтные дашборды для каждого `wiki/domains/*.md` и глобальный `dashboard.base`. **Запускается Stop-hook'ом** (async, ~100ms). Существующие `.base` не перезаписывает — ручные правки выживают. |
@@ -185,7 +185,7 @@ raw/source.md
 1. **Существующие файлы в `raw/` не редактируются** Claude'ом. Создание новых файлов допустимо только через `transcribe` при конвертации бинарников из `raw/formats/`. Удаление и переименование источников — только пользователь.
 2. **`cache.md` — overwrite.** Не append. Старая история — в `log.md`.
 3. **`log.md` — append-only.** Новые записи сверху, старое не правится.
-4. **Lint не правит content.** Все фиксы — через `ingest` по `lint-state.json::open_issues`.
+4. **Lint правит content только в auto-fix категории.** `bin/static_lint.py` применяет script auto-fixes inline (status/tag/wikilink нормализация, schema-violations и т.д.). Agent-fix issues (`missing-summary`) и ask-issues остаются в `lint-state.json::open_issues` для последующей обработки lint-скиллом или пользователем. Никогда не правит content по ask-issues самостоятельно — только после явного решения.
 5. **Один концепт = одна страница.** Перед созданием новой страницы `ingest` обязан проверить `index.md` и `embeddings.json` на дубликаты (semantic dedup).
 6. **Каждая страница имеет источник.** Frontmatter `sources:` с путём в `raw/...` или URL. Страница без источника — баг.
 7. **Wikilinks — единственный способ связи.** Никаких сырых путей к страницам в теле текста.
