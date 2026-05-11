@@ -216,6 +216,7 @@ domain:
 | `non-canonical-wikilink` | wikilink использует path-prefixed форму (`[[wiki/ideas/RLHF]]`, `[[ideas/RLHF]]`) вместо канонической basename `[[RLHF]]`. raw/-ссылки и `wiki/index.md` не сканируются (index автогенерируется с canonical links). Auto-fix сохраняет `#section\|alias` части | `{type, where, link, fix, context}` |
 | `domain-order` | LLM-проверка (Layer 2): `domain:` не упорядочен от частного к общему. Агент использует семантическое знание о соотношении доменов (`RL ⊂ ML`). Auto-fix переписывает блок в порядке из `expected`. Параллельные домены (без иерархии) агент пропускает | `{type, where, current, expected, reasoning}` |
 | `missing-summary` | content-страница (idea/entity/domain/question) без непустого `summary:` во frontmatter. Auto-fix: ingest читает первый абзац, генерирует декларативное саммари ≤120 символов и вставляет в frontmatter. На следующем Stop-hook'е `bin/gen_index.py` подхватит саммари в `wiki/index.md` | `{type, where, page_type}` |
+| `binary-source-outside-formats` | бинарный файл (.pdf/.docx/audio) лежит в `raw/` вне папки `raw/formats/`. Auto-fix через `bin/rename_wiki_page.py <where> <suggested>` — скрипт обновит wikilinks (если есть `![[raw/X.pdf]]`-embeds), потом сделает `mv`. Безопасно: канон строгий (бинари → `raw/formats/`), legitimate cases отсутствуют | `{type, where, suggested}` |
 
 ### Ask user (ingest спрашивает решение)
 
@@ -230,7 +231,6 @@ domain:
 | `outdated-claim` | утверждение в `[[A]]` потенциально опровергнуто `[[B]]` | `{type, where, claim, conflicts_with}` |
 | `dangling-domain-ref` | страница имеет в `domain:` frontmatter ссылку на несуществующую domain-страницу | `{type, where, missing_domain}` |
 | `asymmetric-related` | у страницы `[[A]]` в `related:` есть `[[B]]`, но у `[[B]]` в `related:` нет `[[A]]` | `{type, page_a, page_b}` |
-| `binary-source-outside-formats` | бинарный файл (.pdf/.docx/audio) лежит в `raw/` вне папки `raw/formats/` | `{type, where, suggested}` |
 | `similar-but-unlinked` | две страницы семантически близки (cosine выше порога), но wikilink между ними отсутствует. Только в режиме `--approx` | `{type, page_a, page_b, similarity, threshold}` |
 | `synthesis-drift` | wiki-страница семантически далеко ушла от центроида эмбеддингов своих источников. Сигнал о возможной галлюцинации синтеза. Только в режиме `--approx` | `{type, where, drift, threshold}` |
 

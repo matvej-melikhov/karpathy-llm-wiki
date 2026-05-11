@@ -69,6 +69,7 @@
 | `non-canonical-wikilink` | заменить `link` на `fix` в файле `where`. Локация уточняется через `context` (`line N` для тела, `frontmatter related/domain` для frontmatter). Используй точечный Edit с `link` как старая строка и `fix` как новая |
 | `domain-order` | переписать блок `domain:` во frontmatter `where` в порядке из `expected` (массив имён доменов от частного к общему). Сохранить wikilink-формат (`"[[Domain Name]]"`) — поменять только порядок строк. Issue приходит от Layer 2 (агент уже вынес семантическое суждение); если агент пропустил пару — значит, иерархии нет, не трогаем |
 | `missing-summary` | прочитать первый абзац страницы (или, если страница пустая, поле `aliases` / заголовок), сгенерировать декларативное саммари ≤120 символов. Вставить во frontmatter как `summary: '...'` (одинарные YAML-кавычки, не двойные). При следующем Stop-hook'е `bin/gen_index.py` подхватит саммари в `wiki/index.md` |
+| `binary-source-outside-formats` | `python3 bin/rename_wiki_page.py <where> <suggested>` — скрипт обновит wikilinks (если на бинарь есть `[[raw/X.pdf]]`-ссылки или `![[...]]`-embeds) и сделает `mv`. По одному файлу за раз, не пакетно. Конвенция жёсткая (бинари → `raw/formats/`), legitimate cases отсутствуют |
 
 После каждой правки удалить соответствующий issue из `open_issues`.
 
