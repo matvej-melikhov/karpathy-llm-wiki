@@ -22,18 +22,18 @@ Lint **только читает** wiki и записывает структур
 
 Lint работает в два слоя плюс опциональный embedding-based слой:
 
-**Layer 1 — программная проверка (`bin/lint.py`).** Python-скрипт, реализующий все детерминистические проверки: 15 типов issues. Запускается за секунды, без LLM-стоимости. Пишет `lint-state.json` с найденными `open_issues`.
+**Layer 1 — программная проверка (`bin/static_lint.py`).** Python-скрипт, реализующий все детерминистические проверки: 12 типов issues. Запускается за секунды, без LLM-стоимости. Пишет `lint-state.json` с найденными `open_issues`.
 
-**Layer 1.5 — embedding-based (опционально, `--approx`).** Те же `bin/lint.py`, но с флагом `--approx` подключаются проверки на основе предварительно посчитанных эмбеддингов: `similar-but-unlinked` (semantic missing links) и `synthesis-drift` (детектор отклонения синтеза от источников). Чистые потребители векторов — embedding-сервер (Ollama или LMStudio через OpenAI-совместимый API) не нужен для lint, только `bin/embed.py update` должен быть выполнен заранее.
+**Layer 1.5 — embedding-based (опционально, `--approx`).** Те же `bin/static_lint.py`, но с флагом `--approx` подключаются проверки на основе предварительно посчитанных эмбеддингов: `similar-but-unlinked` (semantic missing links) и `synthesis-drift` (детектор отклонения синтеза от источников). Чистые потребители векторов — embedding-сервер (Ollama или LMStudio через OpenAI-совместимый API) не нужен для lint, только `bin/embed.py update` должен быть выполнен заранее.
 
 Кроме issues, при `--approx` Layer 1.5 пишет в `lint-state.json` отдельное поле `contradiction_candidates` — список пар страниц с высоким cosine, для которых **Layer 2** должен запускать LLM-проверку на противоречия. Это сужает работу Layer 2 с O(n²) до top X% пар (~5-6× редукция при дефолтном `--candidate-percentile 75`).
 
-**Layer 2 — LLM-семантическая проверка.** Этот скилл (lint) запускается после `bin/lint.py`, читает уже записанный state, дополняет `open_issues` семантическими проверками: `contradiction`, `outdated-claim`, `missing-concept`, `style-nit`. Это требует языкового суждения, программно не делается.
+**Layer 2 — LLM-семантическая проверка.** Этот скилл (lint) запускается после `bin/static_lint.py`, читает уже записанный state, дополняет `open_issues` семантическими проверками: `contradiction`, `outdated-claim`, `missing-concept`, `style-nit`. Это требует языкового суждения, программно не делается.
 
 Полный поток `/lint`:
 
 ```
-1. python3 bin/lint.py [--approx]  # Layer 1 (+ 1.5 если --approx)
+1. python3 bin/static_lint.py [--approx]  # Layer 1 (+ 1.5 если --approx)
 2. lint skill (этот документ)       # Layer 2: LLM добавляет семантические issues
 3. Итог: lint-state.json содержит все категории open_issues
 ```
@@ -69,7 +69,7 @@ Lint работает в два слоя плюс опциональный embed
 
 ## Skip-check (агрегатный hash)
 
-Skip-check выполняется в Layer 1 (`bin/lint.py`). Если wiki не менялась с последнего audit и нет накопленных open_issues — оба слоя пропускаются.
+Skip-check выполняется в Layer 1 (`bin/static_lint.py`). Если wiki не менялась с последнего audit и нет накопленных open_issues — оба слоя пропускаются.
 
 `wiki/meta/lint-reports/lint-state.json` хранит результат последнего audit:
 
@@ -126,7 +126,7 @@ Skip-check выполняется в Layer 1 (`bin/lint.py`). Если wiki не
 
 ## Layer 2: contradiction-check (LLM)
 
-Layer 2 запускается **этим скиллом** после `bin/lint.py` отработал. Задача — найти семантические нарушения, которые программно не поймать: `contradiction`, `outdated-claim`, `missing-concept`.
+Layer 2 запускается **этим скиллом** после `bin/static_lint.py` отработал. Задача — найти семантические нарушения, которые программно не поймать: `contradiction`, `outdated-claim`, `missing-concept`.
 
 ### Contradiction check — стратегия зависит от наличия `contradiction_candidates`
 
@@ -205,13 +205,9 @@ domain:
 | `type` | Условие | Структура issue |
 |---|---|---|
 | `status-not-in-enum` | `status` не из `evaluation/in-progress/ready` | `{type, where, value, fix: "in-progress"}` |
-| `status-on-entity` | у `type: entity` присутствует поле `status` | `{type, where}` |
-| `legacy-field` | поля старой схемы (`title`, `complexity`, `first_mentioned`) на не-meta | `{type, where, field}` |
-| `lowercase-tags` | теги в lowercase или со смешанным регистром аббревиатур | `{type, where, tags: [...]}` |
 | `inline-tags` | `tags: [a, b]` инлайн вместо блочного YAML | `{type, where}` |
 | `raw-link-with-extension` | `[[raw/X.md]]` вместо `[[raw/X]]` | `{type, where, link}` |
 | `raw-ref-in-body` | упоминание `[[raw/...]]` в теле страницы | `{type, where, link, line}` |
-| `empty-sources-section` | секция `## Источники`/`## Источники упоминания` содержит только `[[raw/...]]` | `{type, where, section}` |
 | `folder-type-mismatch` | страница лежит в `wiki/<X>/`, но `type:` во frontmatter не соответствует папке | `{type, where, current_type, expected_type}` |
 | `non-canonical-wikilink` | wikilink использует path-prefixed форму (`[[wiki/ideas/RLHF]]`, `[[ideas/RLHF]]`) вместо канонической basename `[[RLHF]]`. raw/-ссылки и `wiki/index.md` не сканируются (index автогенерируется с canonical links). Auto-fix сохраняет `#section\|alias` части | `{type, where, link, fix, context}` |
 | `domain-order` | LLM-проверка (Layer 2): `domain:` не упорядочен от частного к общему. Агент использует семантическое знание о соотношении доменов (`RL ⊂ ML`). Auto-fix переписывает блок в порядке из `expected`. Параллельные домены (без иерархии) агент пропускает | `{type, where, current, expected, reasoning}` |
@@ -240,7 +236,6 @@ domain:
 
 | `type` | Условие |
 |---|---|
-| `empty-section` | секция без контента (может быть намеренно) |
 | `style-nit` | не декларативное настоящее, отсутствие линка на не-ключевую сущность |
 
 ---

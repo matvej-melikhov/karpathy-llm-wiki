@@ -22,7 +22,7 @@
 1. **Вызвать `lint --approx`.** Без флагов — он сам решает, делать ли skip-check; в нашем случае wiki только что менялась, поэтому будет full audit. По завершении в `wiki/meta/lint-reports/lint-state.json` лежит свежий список `open_issues`.
 
    ```bash
-   python3 bin/lint.py --approx
+   python3 bin/static_lint.py --approx
    ```
 
    Флаг `--approx` включает embedding-based проверки `similar-but-unlinked` и `synthesis-drift` (см. `.claude/skills/lint/SKILL.md`). Если эмбеддингов нет — запусти без `--approx`.
@@ -58,13 +58,9 @@
 | `type` | Правка |
 |---|---|
 | `status-not-in-enum` | заменить `status` на значение из `fix` (обычно `in-progress`) |
-| `status-on-entity` | удалить поле `status` из frontmatter |
-| `legacy-field` | удалить поле (`title` / `complexity` / `first_mentioned`) |
-| `lowercase-tags` | переписать tags с правильным регистром (см. `.claude/skills/wiki/references/frontmatter.md`) |
 | `inline-tags` | переписать в блочный YAML |
 | `raw-link-with-extension` | `[[raw/X.md]]` → `[[raw/X]]` |
 | `raw-ref-in-body` | удалить wikilink из тела |
-| `empty-sources-section` | удалить секцию целиком вместе с заголовком |
 | `folder-type-mismatch` | переписать `type:` во frontmatter в значение `expected_type` (берётся из имени папки: `ideas`→`idea`, `entities`→`entity`, `questions`→`question`, `domains`→`domain`) |
 | `non-canonical-wikilink` | заменить `link` на `fix` в файле `where`. Локация уточняется через `context` (`line N` для тела, `frontmatter related/domain` для frontmatter). Используй точечный Edit с `link` как старая строка и `fix` как новая |
 | `domain-order` | переписать блок `domain:` во frontmatter `where` в порядке из `expected` (массив имён доменов от частного к общему). Сохранить wikilink-формат (`"[[Domain Name]]"`) — поменять только порядок строк. Issue приходит от Layer 2 (агент уже вынес семантическое суждение); если агент пропустил пару — значит, иерархии нет, не трогаем |

@@ -61,7 +61,7 @@ Vault разделён на четыре слоя по жизненному ци
 | `raw/meta/embeddings.json` | Эмбеддинги сырых источников (для dedup при ingest и approx-lint). | `bin/embed.py` |
 | `raw/meta/ingested.json` | Манифест dedup: source_url, хеши файлов, целевые wiki-страницы. Чтобы повторный ingest не запускал синтез заново. | `ingest` |
 | `wiki/meta/embeddings.json` | Эмбеддинги всех wiki-страниц (≈7 MB на 50 страниц). | `bin/embed.py` |
-| `wiki/meta/lint-reports/lint-state.json` | Текущее состояние lint (`open_issues`, `aggregate_hash`, `contradiction_candidates`). | `bin/lint.py` (= скилл `lint`) |
+| `wiki/meta/lint-reports/lint-state.json` | Текущее состояние lint (`open_issues`, `aggregate_hash`, `contradiction_candidates`). | `bin/static_lint.py` (= Layer 1 скилла `lint`) |
 | `wiki/meta/lint-reports/lint-report-YYYY-MM-DD.md` | Человеко-читаемый отчёт (опц.). | `lint` (по запросу) |
 | `wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD.md` | Снимок графа знаний (плотность связей, кластеры). | `bin/knowledge_map.py` |
 | `wiki/meta/dashboards/<Domain>.base`, `dashboard.base` | Obsidian Bases-файлы. Дефолтные шаблоны генерируются скриптом; ручные правки сохраняются. | `bin/gen_dashboards.py` (create-only); `obsidian-bases` (для нешаблонных Bases) |
@@ -104,7 +104,7 @@ Vault разделён на четыре слоя по жизненному ци
 | Скрипт | Запись | Назначение |
 |---|---|---|
 | `bin/embed.py` | `wiki/meta/embeddings.json` | Обновляет эмбеддинги для approx-lint. **Запускается Stop-hook'ом** в `.claude/settings.json` после каждого turn'а — скиллы про это не знают и не вызывают вручную. Hash-skip пропускает неизменённые страницы. |
-| `bin/lint.py` | `wiki/meta/lint-reports/lint-state.json` | Программные проверки (15 типов issues) + опц. `--approx` для embedding-based. |
+| `bin/static_lint.py` | `wiki/meta/lint-reports/lint-state.json` | Программные проверки (12 типов issues) + опц. `--approx` для embedding-based. |
 | `bin/knowledge_map.py` | `wiki/meta/kn-maps/knowledge-map-*.md` | Снимок графа знаний. |
 | `bin/transcribe.py` | `raw/<имя>.md` | Конвертация бинарных источников. |
 | `bin/gen_dashboards.py` | `wiki/meta/dashboards/*.base` (только если файла нет) | Генерирует дефолтные дашборды для каждого `wiki/domains/*.md` и глобальный `dashboard.base`. **Запускается Stop-hook'ом** (async, ~100ms). Существующие `.base` не перезаписывает — ручные правки выживают. |
@@ -141,7 +141,7 @@ raw/source.md
    │  Phase 7: domain proposal (если порог N=10 пройден)
    │  Phase 8: lint review (опц.)
    ▼
-   bin/lint.py [--approx] → lint-state.json
+   bin/static_lint.py [--approx] → lint-state.json
    ingest применяет open_issues (auto-fix / ask / skip)
    │
    │  на завершении turn'а Claude — Stop hook:

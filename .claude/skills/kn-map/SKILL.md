@@ -64,7 +64,7 @@ description: >
 ## Что скилл не делает
 
 - **Не редактирует content-файлы** (`wiki/ideas/`, `wiki/entities/`). Артефакты пишутся только в `_attachments/` и `wiki/meta/kn-maps/`.
-- **Не учитывается в `wiki_hash` lint'а** — папка `wiki/meta/kn-maps/` исключена в `bin/lint.py` (см. lint SKILL, секция Skip-check). Поэтому `/kn-map` не триггерит fresh-audit при следующем `/lint`.
+- **Не учитывается в `wiki_hash` lint'а** — папка `wiki/meta/kn-maps/` исключена в `bin/static_lint.py` (см. lint SKILL, секция Skip-check). Поэтому `/kn-map` не триггерит fresh-audit при следующем `/lint`.
 - **Не запускает embedder.** Свежесть `wiki/meta/embeddings.json` — забота Stop-hook'а в `.claude/settings.json`. Если эмбеддингов нет, скрипт падает — пользователь сам разбирается с окружением (Ollama / модель эмбеддера).
 - **Не удаляет старые snapshot'ы.** История `knowledge-map-*.md` в `kn-maps/` накапливается специально — это диахронический срез эволюции wiki (как `lint-report-*.md`).
 

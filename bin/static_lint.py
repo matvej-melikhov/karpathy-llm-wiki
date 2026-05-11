@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
-"""Programmatic lint for the wiki.
+"""Static lint for the wiki — Layer 1.
 
 Implements deterministic checks that don't need LLM judgment. Outputs a
-structured `wiki/meta/lint-state.json` with `open_issues`. The semantic
-checks (contradiction, outdated-claim, missing-concept, style-nit) stay
-agent-driven — they're done in a separate LLM-fueled pass via the lint
-skill (Phase 8 of ingest).
+structured `wiki/meta/lint-state.json` with `open_issues`. Semantic checks
+(contradiction, outdated-claim, missing-concept, tag-casing) stay agent-
+driven — they're done in a separate LLM pass via the `lint` skill.
 
 This script is the "first layer" of two-layer lint:
-1. bin/lint.py — fast, deterministic, ~all schema/structural checks
-2. lint skill — LLM pass for semantic checks, reads lint-state.json
-   from us, adds its own `open_issues` entries.
+1. bin/static_lint.py — fast, deterministic, schema/structural checks
+2. lint skill — LLM pass for semantic checks; reads lint-state.json,
+   adds its own `open_issues` entries.
 
 Usage:
-    python3 bin/lint.py            # run, write lint-state.json, print summary
-    python3 bin/lint.py --force    # bypass aggregate-hash skip-check
-    python3 bin/lint.py --json     # also print full open_issues JSON
-    python3 bin/lint.py --check <type>   # run only one check (debugging)
+    python3 bin/static_lint.py            # run, write lint-state.json
+    python3 bin/static_lint.py --force    # bypass aggregate-hash skip-check
+    python3 bin/static_lint.py --json     # also print full open_issues JSON
+    python3 bin/static_lint.py --check <type>   # run only one check (debug)
 
 Exit codes:
     0 — clean (no issues, or skipped)
@@ -65,18 +64,6 @@ FOLDER_TO_TYPE = {
 CONTENT_FOLDERS = list(FOLDER_TO_TYPE.keys())
 
 VALID_STATUSES = {"evaluation", "in-progress", "ready"}
-LEGACY_FIELDS = {"title", "complexity", "first_mentioned"}
-
-# Tag casing rules: known abbreviations stay uppercase, regular words get
-# Capitalized first letter. We can't enumerate all valid abbreviations, so
-# we use heuristics.
-KNOWN_ABBREVIATIONS = {
-    "ML", "RL", "NLP", "RLHF", "LLM", "LoRA", "GAN", "VAE", "MOC",
-    "AI", "DL", "CV", "NN", "GPT", "BERT", "API", "URL", "HTML",
-    "JSON", "YAML", "PDF", "PPO", "DPO", "RM", "KL", "TD", "MC",
-    "GAE", "TRPO", "MAP", "MRR", "DCG", "ERR", "IR", "QA", "GBDT",
-    "MDI", "FI", "PFound", "OCR",
-}
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -346,98 +333,6 @@ def check_status_not_in_enum(pages: list[Page]) -> Iterable[Issue]:
                 "where": p.relpath(),
                 "value": status,
                 "fix": "in-progress",
-            })
-
-
-def check_status_on_entity(pages: list[Page]) -> Iterable[Issue]:
-    """type: entity pages must not have a status field."""
-    for p in pages:
-        if p.fm is None:
-            continue
-        if p.page_type != "entity":
-            continue
-        if "status" in p.fm.fields:
-            yield Issue("status-on-entity", {"where": p.relpath()})
-
-
-def check_legacy_field(pages: list[Page]) -> Iterable[Issue]:
-    """Old-schema fields (title/complexity/first_mentioned) on non-meta pages."""
-    for p in pages:
-        if p.fm is None:
-            continue
-        if p.page_type == "meta":
-            continue
-        for field_name in LEGACY_FIELDS:
-            if field_name in p.fm.fields:
-                yield Issue("legacy-field", {
-                    "where": p.relpath(),
-                    "field": field_name,
-                })
-
-
-def _expected_tag_casing(tag: str) -> str | None:
-    """Return the canonically-cased version of `tag`, or None if it already
-    matches schema rules.
-
-    Schema (from references/frontmatter.md):
-    - abbreviations uppercase: ML, RL, NLP, RLHF, ...
-    - regular words capitalized: Alignment, Optimization, ...
-    - no lowercase abbreviations, no mixed-case abbreviations
-
-    Heuristic (without hardcoding every possible abbreviation):
-    - tag is all-uppercase → already canonical abbreviation, accept
-    - tag in KNOWN_ABBREVIATIONS list (case-insensitive) → fix to canonical form
-      (handles LoRA, GPT-3, etc. with non-trivial casing)
-    - tag starts with uppercase letter (rest mixed/lower) → accept
-      (Capitalized "Alignment", or mixed like "KMeans", "MapReduce")
-    - tag starts with lowercase → fix: capitalize first letter, lowercase rest
-
-    This is permissive: any tag that *could* be a valid abbreviation or
-    capitalized word passes. It only flags clear violations like 'ml' or
-    'optimization'.
-    """
-    if not tag:
-        return None
-
-    # All-uppercase: canonical abbreviation form
-    if tag.isupper():
-        return None
-
-    # Known abbreviation with non-trivial casing (LoRA → keep as LoRA)
-    upper = tag.upper()
-    for a in KNOWN_ABBREVIATIONS:
-        if a.upper() == upper:
-            return None if tag == a else a
-
-    # Starts with uppercase letter: accept (Capitalized regular word, or
-    # mixed-case like KMeans we can't validate further without a dictionary)
-    if tag[0].isupper():
-        return None
-
-    # Starts with lowercase: violation. Suggest Capitalized form as fix.
-    expected = tag[0].upper() + tag[1:].lower()
-    return expected
-
-
-def check_lowercase_tags(pages: list[Page]) -> Iterable[Issue]:
-    """Tags must follow casing schema: abbreviations uppercase
-    (ML/RL/NLP), regular words Capitalized."""
-    for p in pages:
-        if p.fm is None:
-            continue
-        tags = p.fm.fields.get("tags")
-        if not tags or not isinstance(tags, list):
-            continue
-        bad: list[str] = []
-        for t in tags:
-            if not isinstance(t, str):
-                continue
-            if _expected_tag_casing(t) is not None:
-                bad.append(t)
-        if bad:
-            yield Issue("lowercase-tags", {
-                "where": p.relpath(),
-                "tags": bad,
             })
 
 
@@ -799,63 +694,6 @@ def check_binary_source_outside_formats(pages: list[Page]) -> Iterable[Issue]:
             })
 
 
-def check_empty_section(pages: list[Page]) -> Iterable[Issue]:
-    """Heading (## or higher) followed by no non-empty content before the
-    next heading or end of file. Skip-category — informational only, since
-    empty sections may be intentional placeholders."""
-    for p in pages:
-        if p.fm is None or not p.body:
-            continue
-        # Skip meta pages (their structure is operation-driven, not content)
-        if p.page_type == "meta" or p.folder == "meta":
-            continue
-
-        lines = p.body.split("\n")
-        in_code = False
-        # Walk: when we find a heading, look ahead for content until next heading
-        for i, raw_line in enumerate(lines):
-            stripped = raw_line.lstrip()
-            if stripped.startswith("```"):
-                in_code = not in_code
-                continue
-            if in_code:
-                continue
-            h = re.match(r"^(#{2,})\s+(.+?)\s*$", raw_line)
-            if not h:
-                continue
-            heading_level = len(h.group(1))
-            heading_text = h.group(2).strip()
-            # Look ahead for content
-            has_content = False
-            j = i + 1
-            in_code_inner = False
-            while j < len(lines):
-                next_line = lines[j]
-                ns = next_line.lstrip()
-                if ns.startswith("```"):
-                    in_code_inner = not in_code_inner
-                    j += 1
-                    continue
-                # Next heading at same or higher level → section ended
-                next_h = re.match(r"^(#{1,})\s+", next_line)
-                if next_h and not in_code_inner:
-                    next_level = len(next_h.group(1))
-                    if next_level <= heading_level:
-                        break
-                if next_line.strip():
-                    # Non-empty line. Skip HTML comments — they're
-                    # placeholders, not content.
-                    if not next_line.strip().startswith("<!--"):
-                        has_content = True
-                        break
-                j += 1
-            if not has_content:
-                yield Issue("empty-section", {
-                    "where": p.relpath(),
-                    "section": heading_text,
-                })
-
-
 def check_dangling_domain_ref(pages: list[Page]) -> Iterable[Issue]:
     """domain: ["[[X]]"] points to a non-existent wiki/domains/X.md."""
     domain_pages = {p.name for p in pages if p.folder == "domains"}
@@ -1010,9 +848,6 @@ def check_folder_type_mismatch(pages: list[Page]) -> Iterable[Issue]:
 # Registry: ordered list of (issue_type_string, check_function)
 _CHECKS: list[tuple[str, Any]] = [
     ("status-not-in-enum", check_status_not_in_enum),
-    ("status-on-entity", check_status_on_entity),
-    ("legacy-field", check_legacy_field),
-    ("lowercase-tags", check_lowercase_tags),
     ("inline-tags", check_inline_tags),
     ("non-canonical-wikilink", check_non_canonical_wikilink),
     ("folder-type-mismatch", check_folder_type_mismatch),
@@ -1023,7 +858,6 @@ _CHECKS: list[tuple[str, Any]] = [
     ("asymmetric-related", check_asymmetric_related),
     ("dangling-domain-ref", check_dangling_domain_ref),
     ("missing-summary", check_missing_summary),
-    ("empty-section", check_empty_section),
     ("binary-source-outside-formats", check_binary_source_outside_formats),
 ]
 

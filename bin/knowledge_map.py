@@ -55,7 +55,7 @@ from embed import (
     cosine,
     percentile,
 )
-from lint import (
+from static_lint import (
     Page,
     _extract_wikilinks,
     _normalize_wiki_target,
