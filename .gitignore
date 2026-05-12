@@ -31,6 +31,9 @@ node_modules/
 !/raw/meta/
 /raw/meta/*
 !/raw/meta/.gitkeep
+!/raw/brainstorm/
+/raw/brainstorm/*
+!/raw/brainstorm/.gitkeep
 
 # === Per-user content: wiki/ ===
 /wiki/*
@@ -39,6 +42,7 @@ node_modules/
 !/wiki/entities/
 !/wiki/domains/
 !/wiki/questions/
+!/wiki/minds/
 !/wiki/meta/
 /wiki/ideas/*
 !/wiki/ideas/.gitkeep
@@ -48,6 +52,8 @@ node_modules/
 !/wiki/domains/.gitkeep
 /wiki/questions/*
 !/wiki/questions/.gitkeep
+/wiki/minds/*
+!/wiki/minds/.gitkeep
 /wiki/meta/*
 !/wiki/meta/.gitkeep
 
