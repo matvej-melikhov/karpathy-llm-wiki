@@ -1,42 +1,362 @@
 ---
 name: lint
 description: >
-  Read-only ревьюер Obsidian wiki-vault. Находит страницы-сироты, мёртвые wikilinks,
-  устаревшие утверждения, отсутствующие перекрёстные ссылки, пробелы во frontmatter,
-  пустые секции, нарушения схемы. Записывает результат в `wiki/meta/lint-reports/lint-state.json`,
-  включая структурированный список `open_issues` для применения ingest. Кэширует
-  состояние через aggregate hash, чтобы не перепроверять неизменную wiki.
-  Триггеры: /lint, "lint", "проверка здоровья", "очисти wiki",
-  "проверь wiki", "найди сирот", "wiki audit".
+  Ревьюер Obsidian wiki-vault. Запускает статические проверки + script auto-fixes,
+  затем агентские проверки (Layer 2) и LLM-fix'ы, в конце ведёт диалог с
+  пользователем по оставшимся ask-issues. Единственный owner всего post-detection
+  пайплайна — вызывается напрямую (`/lint`) или из ingest в конце synthesis-цикла.
+  Триггеры: /lint, "lint", "проверка здоровья", "очисти wiki", "проверь wiki",
+  "найди сирот", "wiki audit".
 ---
 
-# lint: ревьюер wiki
+# lint: пайплайн ревью wiki
 
-Lint детектит проблемы и **применяет script-auto-fixes inline** (Layer 1, `bin/static_lint.py` пишет в content-файлы). Issues, требующие LLM (agent-fix) или решения пользователя (ask), остаются в `lint-state.json::open_issues` для последующей обработки lint-скиллом или ingest'ом.
+Lint — единственный owner всего пайплайна обработки issues. Когда скилл вызван
+(пользователем напрямую или из ingest), он:
+
+1. Запускает `bin/static_lint.py` (Layer 1 + script auto-fixes inline).
+2. Запускает Layer 2 — LLM-семантические проверки.
+3. Применяет agent auto-fixes (`missing-summary`, `domain-order`).
+4. Ведёт диалог с пользователем по оставшимся ask-issues.
+5. Перезаписывает `lint-state.json` финальным состоянием.
+
+После выполнения: либо все issues разрешены (open_issues пуст), либо остались
+явно отложенные пользователем («позже»).
 
 ---
 
-## Two-layer (плюс опциональный 1.5) архитектура
+## Pipeline
 
-Lint работает в два слоя плюс опциональный embedding-based слой:
+### Step 1. Запустить `bin/static_lint.py`
 
-**Layer 1 — программная проверка + script auto-fix (`bin/static_lint.py`).** Python-скрипт, реализующий все детерминистические проверки (13 типов issues). После детекта применяет автоматические правки для script-fixable типов (`status-not-in-enum`, `invalid-fields`, `inline-tags`, `non-canonical-wikilink`, `folder-type-mismatch`, `raw-link-with-extension`, `raw-ref-in-body`, `binary-source-outside-formats`). В `lint-state.json::open_issues` остаются только агентские (`missing-summary`) и ask-issues. Запускается за секунды, без LLM-стоимости.
-
-**Layer 1.5 — embedding-based (опционально, `--approx`).** Те же `bin/static_lint.py`, но с флагом `--approx` подключаются проверки на основе предварительно посчитанных эмбеддингов: `similar-but-unlinked` (semantic missing links) и `synthesis-drift` (детектор отклонения синтеза от источников). Чистые потребители векторов — embedding-сервер (Ollama или LMStudio через OpenAI-совместимый API) не нужен для lint, только `bin/embed.py update` должен быть выполнен заранее.
-
-Кроме issues, при `--approx` Layer 1.5 пишет в `lint-state.json` отдельное поле `contradiction_candidates` — список пар страниц с высоким cosine, для которых **Layer 2** должен запускать LLM-проверку на противоречия. Это сужает работу Layer 2 с O(n²) до top X% пар (~5-6× редукция при дефолтном `--candidate-percentile 75`).
-
-**Layer 2 — LLM-семантическая проверка.** Этот скилл (lint) запускается после `bin/static_lint.py`, читает уже записанный state, дополняет `open_issues` семантическими проверками: `contradiction`, `outdated-claim`, `missing-concept`, `style-nit`. Это требует языкового суждения, программно не делается.
-
-Полный поток `/lint`:
-
-```
-1. python3 bin/static_lint.py [--approx]  # Layer 1 (+ 1.5 если --approx)
-2. lint skill (этот документ)       # Layer 2: LLM добавляет семантические issues
-3. Итог: lint-state.json содержит все категории open_issues
+```bash
+python3 bin/static_lint.py [--approx]
 ```
 
-Если Layer 1 упал (нет Python и т.д.), скилл может выполнить детерминистические проверки сам, но это медленнее и дороже токенов.
+Скрипт сам делает:
+- skip-check (если wiki не менялась и нет накопленных issues — пропуск)
+- детект 13 типов issues (Layer 1) + 2 embedding-based (Layer 1.5 при `--approx`)
+- **inline применение script auto-fixes** для всех script-fixable типов
+- запись `lint-state.json` с remaining issues (agent-fix + ask + skip)
+
+Флаг `--approx` включает embedding-based проверки `similar-but-unlinked` и
+`synthesis-drift` плюс заполняет `contradiction_candidates` для Layer 2. Если
+эмбеддингов нет (Ollama не запущена) — скрипт тихо игнорирует флаг.
+
+### Step 2. Прочитать `lint-state.json`
+
+Получить:
+- `open_issues` — всё что не пофиксил скрипт
+- `contradiction_candidates` (опц.) — пары для Layer 2
+
+Если `open_issues` пуст и `contradiction_candidates` нет — pipeline закончен,
+ничего больше делать не нужно. Сообщить пользователю «wiki чистая».
+
+### Step 3. Layer 2 — LLM-проверки
+
+См. секцию «Layer 2» ниже. Дописывает свои issues в `open_issues` (в памяти,
+запись на диск только в Step 6).
+
+### Step 4. Agent auto-fixes
+
+Для issues типа `missing-summary` и `domain-order` (см. секцию «Agent auto-fixes»
+ниже) применить LLM-генерируемые правки. Удалить применённые из `open_issues`.
+
+### Step 5. Ask-dialogue
+
+Оставшиеся ask-issues спросить у пользователя одним батчем (см. «Ask-dialogue»).
+По каждому ответу применить соответствующее действие, удалить из `open_issues`.
+Issues с ответом «отложить» остаются в `open_issues`.
+
+### Step 6. Записать финальное состояние
+
+Если в Step 3-5 что-то поменялось — пересчитать `wiki_hash` и записать
+`lint-state.json` с обновлённым `open_issues`. Иначе оставить как есть.
+
+---
+
+## Layer 2: LLM-проверки
+
+Layer 2 запускается **этим скиллом** после Layer 1+1.5. Задача — найти
+семантические нарушения, которые программно не поймать.
+
+### `domain-order` — порядок доменов в frontmatter
+
+Convention: в поле `domain:` домены идут **от частного к общему** (первый =
+primary classification, используется для раскраски knowledge map).
+
+**Почему LLM, не скрипт.** Иерархия доменов («RL ⊂ ML») — знание о мире, не
+структурное свойство wiki. Скриптовые подсчёты ломаются: новый широкий
+домен начинает с count=1; cross-cutting узкий домен может иметь много страниц.
+
+**Когда проверять.** Перед применением agent fix'ов в Step 4. Для каждой
+content-страницы с ≥2 доменами:
+1. Прочитать `domain:` массив из frontmatter.
+2. Применить семантическое суждение: упорядочены ли они от узкого к широкому?
+3. Если нет — добавить issue:
+   ```json
+   {
+     "type": "domain-order",
+     "where": "wiki/ideas/PPO.md",
+     "current": ["Machine Learning", "Reinforcement Learning"],
+     "expected": ["Reinforcement Learning", "Machine Learning"],
+     "reasoning": "RL ⊂ ML"
+   }
+   ```
+4. Если домены разнородные/параллельные (например `[ML, Knowledge Management]`) —
+   issue не создаём.
+
+### `tag-casing` — регистр аббревиатур в тегах
+
+Convention: аббревиатуры uppercase (`ML`, `RL`, `IR`, `NLP`, `RLHF`), обычные
+слова TitleCase (`Code`, `Optimization`, `Alignment`).
+
+**Почему LLM, не скрипт.** Регистр требует семантики. `Code` — обычное слово,
+не аббревиатура. `LoRA` — аббревиатура с нестандартным регистром. `MapReduce` —
+композит. Скрипт не отличит без словаря, а словарь полным быть не может.
+
+**Когда проверять.** Перед Step 4. Для каждой страницы с тегами:
+1. Прочитать `tags:` массив.
+2. Для каждого тега, который выглядит подозрительно (lowercase, mixed case
+   у явной аббревиатуры) применить семантическое суждение.
+3. Если регистр неправильный — добавить issue:
+   ```json
+   {
+     "type": "tag-casing",
+     "where": "wiki/ideas/X.md",
+     "current": "ml",
+     "expected": "ML",
+     "reasoning": "ML — аббревиатура (Machine Learning)"
+   }
+   ```
+
+### `contradiction` — противоречие между утверждениями двух страниц
+
+**Стратегия зависит от наличия `contradiction_candidates` в state:**
+
+**С `--approx`:** в `lint-state.json` есть отфильтрованный список пар
+(cosine ≥ порог). Layer 2 проверяет **только эти пары** — десятки штук
+вместо O(n²).
+
+```
+1. Прочитать contradiction_candidates (отсортирован по similarity descending).
+2. Для каждой пары прочитать обе страницы, сравнить утверждения.
+3. Если противоречие найдено — добавить:
+   {"type": "contradiction", "page_a": "...", "page_b": "...",
+    "claim": "<краткое описание>"}
+4. Если противоречий нет — не флагать «проверено и чисто».
+```
+
+**Без `--approx`:** полный обход O(n²) — дорого. Для wiki >50 страниц
+рекомендуется всегда `--approx`.
+
+### `outdated-claim`
+
+Утверждение в `[[A]]` потенциально опровергнуто более новой страницей `[[B]]`.
+
+**Когда проверять.** Идти по парам с пересекающимися темами (используя
+`contradiction_candidates` если есть). Для каждой пары: если у `B` дата
+`updated:` новее, чем у `A`, и темы пересекаются — проверить, не противоречит
+ли `B` утверждениям в `A`.
+
+Issue:
+```json
+{
+  "type": "outdated-claim",
+  "where": "wiki/ideas/A.md",
+  "claim": "<утверждение в A>",
+  "conflicts_with": "wiki/ideas/B.md"
+}
+```
+
+### `missing-concept`
+
+Концепция упомянута в ≥3 страницах, но своей wiki-страницы у неё нет.
+
+**Когда проверять.** Для каждого capitalized term, упомянутого в теле или
+frontmatter ≥3 страниц без обёртки в wikilink:
+1. Решить: это термин достойный своей страницы? (агентское суждение)
+2. Если да — добавить issue:
+   ```json
+   {
+     "type": "missing-concept",
+     "term": "GAE",
+     "mentioned_in": ["wiki/ideas/PPO.md", "wiki/ideas/TD Learning.md", ...]
+   }
+   ```
+
+---
+
+## Agent auto-fixes
+
+Применяются **автоматически** (без вопросов пользователю), но требуют LLM.
+
+### `missing-summary`
+
+Контент-страница без `summary:` во frontmatter (либо `summary: ""`).
+
+**Действие:**
+1. Прочитать страницу целиком.
+2. Сгенерировать саммари ≤120 символов: одно декларативное предложение, что
+   это и зачем. Без отсылок к источнику, без «эта страница описывает...».
+3. Вписать в frontmatter одинарными YAML-кавычками: `summary: 'текст'`.
+   Двойные кавычки только если внутри есть одинарная. Внутри текста допустимы
+   `:`, `$`, `\`, диакритика — одинарные кавычки безопасны.
+4. На следующем Stop-hook'е `bin/gen_index.py` подхватит саммари в
+   `wiki/index.md`.
+5. Удалить issue из `open_issues`.
+
+Если страница пустая (нет body) — взять тему из заголовка/aliases, описать
+максимально кратко.
+
+### `domain-order`
+
+Issue эмитится Layer 2 (см. выше), здесь применяем.
+
+**Действие:**
+1. Прочитать `domain:` блок из frontmatter `where`.
+2. Переписать в порядке из `expected` (массив имён в правильном порядке).
+3. Сохранить wikilink-формат (`"[[Domain Name]]"`) — поменять только порядок.
+4. Удалить issue из `open_issues`.
+
+### `tag-casing`
+
+Issue эмитится Layer 2 (см. выше), применяем здесь.
+
+**Действие:**
+1. Прочитать `tags:` массив из `where`.
+2. Заменить `current` на `expected`.
+3. Удалить issue из `open_issues`.
+
+---
+
+## Ask-dialogue
+
+Оставшиеся issues (тип ≠ auto-fix и ≠ agent-fix) спросить у пользователя одним
+батчем. Категории см. в таблице ниже.
+
+### Формат вопроса
+
+```
+Lint нашёл проблемы, требующие решения:
+
+1. [dead-link] [[SFT]] упомянута в [[RLHF]], страницы нет.
+   → создать заглушку / убрать ссылку / отложить?
+
+2. [orphan] [[Foo Bar]] никем не упомянута.
+   → удалить / слинковать с [[X]] / отложить?
+
+3. [missing-concept] "GAE" в [[PPO]], [[TD Learning]], [[Advantage]].
+   → создать idea-страницу / отложить?
+
+4. [contradiction] [[A]] и [[B]] (similarity 0.87): <claim>
+   → разрешить (какая страница права?) / отложить?
+
+5. [asymmetric-related] [[A]] → [[B]], но [[B]] не ссылается на [[A]].
+   → симметризовать / удалить одностороннюю / отложить?
+
+6. [similar-but-unlinked] [[PPO]] и [[Policy Gradient]] (cosine 0.87)
+   семантически близки, но wikilink между ними отсутствует.
+   → связать в обе стороны / связать в одну / игнорировать / отложить?
+
+7. [synthesis-drift] [[RLHF]] (drift 0.42) сильно отклонилась от
+   эмбеддинга своих источников. Возможна галлюцинация.
+   → перечитать страницу и сравнить с источником / отложить?
+```
+
+### Действия по ответам
+
+- **«Создать [[X]]»** (`dead-link`, `missing-concept`) → создать stub-страницу
+  по `_templates/idea.md` (или `entity` если контекст указывает) с минимальным
+  содержанием, удалить issue.
+- **«Убрать ссылку»** (`dead-link`) → удалить wikilink из тела родительской
+  страницы, удалить issue.
+- **«Удалить»** (`orphan`) → удалить файл целиком, удалить issue.
+- **«Слинковать с [[X]]»** (`orphan`) → дописать wikilink на текущую страницу
+  в подходящую родительскую (выбрать `X` агентски), удалить issue.
+- **«Симметризовать»** (`asymmetric-related`) → дописать `[[A]]` в `related:`
+  страницы B, удалить issue.
+- **«Удалить одностороннюю»** (`asymmetric-related`) → удалить `[[B]]` из
+  `related:` страницы A, удалить issue.
+- **«Создать domain»** (`dangling-domain-ref`) → создать
+  `wiki/domains/<missing_domain>.md` из `_templates/domain.md` с минимальным
+  описанием, удалить issue.
+- **«Убрать domain»** (`dangling-domain-ref`) → удалить
+  `[[<missing_domain>]]` из поля `domain:` страницы, удалить issue.
+- **«Связать обе»** (`similar-but-unlinked`) → добавить `[[B]]` в `related:` A
+  И `[[A]]` в `related:` B, удалить issue.
+- **«Связать одну»** (`similar-but-unlinked`) → спросить направление, добавить
+  wikilink в `related:` соответствующей страницы, удалить issue.
+- **«Игнорировать»** (`similar-but-unlinked`) → удалить issue (могут быть
+  параллельные сущности, связь не нужна).
+- **«Разрешить»** (`contradiction`, `outdated-claim`) → агент применяет
+  правильное утверждение к одной из страниц или к обеим, удалить issue.
+- **«Перечитать»** (`synthesis-drift`) → прочитать страницу + связанные
+  `[[raw/...]]`, сверить, при необходимости обновить, удалить issue.
+- **«Отложить» / «позже»** → оставить issue в `open_issues`. Снова всплывёт
+  при следующем `/lint`.
+
+### Несколько issues разом
+
+Пользователь может ответить пачкой («1 — создать, 2 — отложить, 3, 4 —
+симметризовать»). Применить каждый ответ к соответствующему issue.
+
+---
+
+## Категории issues
+
+Каждый issue имеет `type` — категория определяет, на каком шаге pipeline он
+обрабатывается.
+
+### Script auto-fix (Step 1, inline в `static_lint.py`)
+
+Применяется самим скриптом, не доходит до lint-скилла. Перечислено для
+контекста.
+
+| `type` | Условие | Структура issue |
+|---|---|---|
+| `status-not-in-enum` | `status` не из `evaluation/in-progress/ready` | `{type, where, value, fix}` |
+| `invalid-fields` | frontmatter не соответствует `_templates/<type>.md`. Subtype `extra` (удалить поле) или `missing` (добавить с default из шаблона) | `{type, where, subtype, field}` |
+| `inline-tags` | `tags: [a, b]` инлайн вместо block YAML | `{type, where}` |
+| `raw-link-with-extension` | `[[raw/X.md]]` вместо `[[raw/X]]` | `{type, where, link}` |
+| `raw-ref-in-body` | `[[raw/...]]` в теле страницы | `{type, where, link, line}` |
+| `folder-type-mismatch` | `wiki/<X>/` vs `type:` рассогласованы | `{type, where, current_type, expected_type}` |
+| `non-canonical-wikilink` | path-prefixed `[[wiki/ideas/X]]` вместо `[[X]]` | `{type, where, link, fix, context}` |
+| `binary-source-outside-formats` | бинарь в `raw/` вне `raw/formats/` | `{type, where, suggested}` |
+
+### Agent auto-fix (Step 4)
+
+Требует LLM (генерация контента или семантическое суждение). См. секцию выше.
+
+| `type` | Условие | Структура |
+|---|---|---|
+| `missing-summary` | content-страница без `summary:` | `{type, where, page_type}` |
+| `domain-order` | LLM-issue, см. Layer 2 | `{type, where, current, expected, reasoning}` |
+| `tag-casing` | LLM-issue, см. Layer 2 | `{type, where, current, expected, reasoning}` |
+
+### Ask user (Step 5)
+
+Требует решения пользователя.
+
+| `type` | Условие | Структура |
+|---|---|---|
+| `dead-link` | wikilink на несуществующую страницу | `{type, where, what, context}` |
+| `orphan` | страница без входящих wikilinks | `{type, where}` |
+| `missing-concept` | концепция в ≥3 страницах без своей page | `{type, term, mentioned_in}` |
+| `contradiction` | противоречие двух страниц | `{type, page_a, page_b, claim}` |
+| `outdated-claim` | утверждение опровергнуто более новой | `{type, where, claim, conflicts_with}` |
+| `dangling-domain-ref` | `domain:` на несуществующую domain-страницу | `{type, where, missing_domain}` |
+| `asymmetric-related` | A.related → B без B.related → A | `{type, page_a, page_b}` |
+| `similar-but-unlinked` | две страницы близки, wikilink отсутствует (`--approx`) | `{type, page_a, page_b, similarity, threshold}` |
+| `synthesis-drift` | страница ушла далеко от центроида источников (`--approx`) | `{type, where, drift, threshold}` |
+
+### Skip
+
+Информационные флаги, не спрашиваем:
+
+| `type` | Условие |
+|---|---|
+| `style-nit` | стилистические замечания (не декларативное настоящее, отсутствие линка на не-ключевую сущность) |
 
 ---
 
@@ -44,252 +364,26 @@ Lint работает в два слоя плюс опциональный embed
 
 | Команда | Поведение |
 |---|---|
-| `/lint` | Запустить Layer 1 + Layer 2. Skip-check по hash. Если wiki не менялась И нет open_issues — пропуск. |
-| `/lint --force` | Игнорировать skip-check, всегда full audit (оба слоя). |
-| `/lint --fast` | Только Layer 1 (программный), без LLM-фазы. Быстро, но без семантических проверок. |
-| `/lint --approx` | Layer 1 + Layer 1.5 + Layer 2. Подключает embedding-based проверки. Эмбеддинги поддерживает Stop-hook; если их нет (Ollama / модель недоступны) — слой просто пропустится с предупреждением. |
-| `/lint --approx --fast` | Layer 1 + Layer 1.5 без LLM-слоя. Покрывает максимум структурных + семантических нарушений без затрат на LLM. |
-
-**Параметры тонкой настройки `--approx`:**
-
-| Флаг | По умолчанию | Что делает |
-|---|---|---|
-| `--similarity-percentile FLOAT` | 95 | Для `similar-but-unlinked`: пары выше этого перцентиля попарных косинусов считаются близкими |
-| `--drift-std FLOAT` | 1.5 | Для `synthesis-drift`: множитель std-deviations над средним drift'ом |
-
-Плюс встроенные floor-значения (cosine ≥ 0.6, drift ≥ 0.1) — защита от ложных срабатываний на «плоских» распределениях.
-
-После audit:
-- если есть open_issues — список выводится пользователю
-- предлагается: "Применить через `/ingest --fix`?"
+| `/lint` | Полный pipeline. Skip-check внутри `static_lint.py` пропустит запуск если wiki не менялась. |
+| `/lint --force` | Передать `--force` в скрипт — игнорировать skip-check. |
+| `/lint --fast` | Только Step 1 (script). Без Layer 2 LLM-проверок и без agent-fixes. |
+| `/lint --approx` | Step 1 c `--approx` (Layer 1.5 эмбеддинги). Layer 2 будет использовать `contradiction_candidates`. |
+| `/lint --approx --fast` | Layer 1+1.5 без LLM-фазы. Максимум структурных + семантических issues без затрат. |
 
 ---
 
-## Skip-check (агрегатный hash)
+## Конвенции wiki
 
-Skip-check выполняется в Layer 1 (`bin/static_lint.py`). Если wiki не менялась с последнего audit и нет накопленных open_issues — оба слоя пропускаются.
-
-`wiki/meta/lint-reports/lint-state.json` хранит результат последнего audit:
-
-```json
-{
-  "wiki_hash": "<sha256 от конкатенации всех wiki/**/*.md>",
-  "last_audit": "2026-04-29T15:45:00",
-  "files_checked": 11,
-  "open_issues": [
-    {
-      "type": "dead-link",
-      "where": "wiki/ideas/RLHF.md",
-      "what": "[[SFT]]",
-      "context": "упомянута на строке 32"
-    }
-  ]
-}
-```
-
-**При входе в `/lint`:**
-
-1. Если `wiki/meta/lint-reports/lint-state.json` отсутствует — пропустить skip-check, идти на full audit.
-2. Прочитать `lint-state.json`, получить `wiki_hash` и `open_issues`.
-3. Посчитать текущий `wiki_hash`:
-   ```bash
-   find wiki -name '*.md' \
-     -not -path 'wiki/meta/lint-reports/*' \
-     -not -path 'wiki/meta/kn-maps/*' \
-     -not -path 'wiki/meta/dashboards/*' \
-     | sort | xargs cat | sha256sum | cut -d' ' -f1
-   ```
-   (Сортировка чтобы порядок не влиял; конкатенация всех тел; один итоговый sha256.)
-4. Сравнить с сохранённым `wiki_hash`:
-   - Совпадает И `open_issues` пуст → пропуск:
-     ```
-     Wiki не менялась с последнего audit (2026-04-29 15:45). Чисто. Пропускаю.
-     ```
-   - Совпадает И `open_issues` не пуст → не аудитим заново, **показываем сохранённые `open_issues`** + предлагаем починить через `/ingest --fix`.
-   - Не совпадает → full audit.
-
-С `--force` шаги 1–4 пропускаются.
-
----
-
-## Full audit
-
-Полный обход wiki, без правок. По завершении:
-
-1. Записать `wiki/meta/lint-reports/lint-state.json` с актуальным `wiki_hash`, `last_audit`, `files_checked`, новым списком `open_issues`.
-2. Вывести пользователю краткую сводку + список issues.
-3. Предложить: "Применить безопасные правки и пройтись по требующим решения через `/ingest --fix`?"
-
----
-
-## Layer 2: contradiction-check (LLM)
-
-Layer 2 запускается **этим скиллом** после `bin/static_lint.py` отработал. Задача — найти семантические нарушения, которые программно не поймать: `contradiction`, `outdated-claim`, `missing-concept`.
-
-### Contradiction check — стратегия зависит от наличия `contradiction_candidates`
-
-**Если в `lint-state.json` есть поле `contradiction_candidates`** (запустили с `--approx`):
-
-```json
-{
-  "contradiction_candidates": [
-    {"page_a": "wiki/ideas/A.md", "page_b": "wiki/ideas/B.md", "similarity": 0.87},
-    {"page_a": "...", "page_b": "...", "similarity": 0.84},
-    ...
-  ]
-}
-```
-
-Это уже отфильтрованный embedding-pre-filter список пар, которые семантически близки и потенциально могут содержать противоречия. Проходим **только по этим парам**, не по всему O(n²).
-
-Поведение:
-1. Прочитать список candidates (отсортирован по similarity descending — самые похожие сверху)
-2. Для каждой пары прочитать обе страницы, сравнить ключевые утверждения
-3. Если найдено противоречие — добавить в `open_issues`:
-   ```json
-   {"type": "contradiction", "page_a": "...", "page_b": "...", "claim": "<краткое описание противоречия>"}
-   ```
-4. Если противоречий нет — ничего не делать (не флагуем «проверено и чисто»)
-
-**Если поля `contradiction_candidates` нет** (запустили без `--approx`):
-
-Классический полный обход. Перебрать все content-страницы попарно (O(n²)) и проверить на противоречия. Дорого по токенам — для wiki >50 страниц рекомендуем включать `--approx` чтобы пользоваться pre-filter.
-
-### Outdated-claim и missing-concept
-
-Эти проверки идут **по всему content** wiki независимо от `--approx`:
-- `outdated-claim` — найти утверждения в страницах, опровергнутые более новыми источниками
-- `missing-concept` — концепции, которые упоминаются в ≥3 страницах, но не имеют своей wiki-страницы
-
-### Domain-order (порядок доменов)
-
-Convention wiki: в поле `domain:` домены расположены **от частного к общему** — первый в списке считается primary classification (используется в knowledge map для раскраски). Например, для PPO правильный порядок:
-
-```yaml
-domain:
-  - "[[Reinforcement Learning]]"   # узкий
-  - "[[Machine Learning]]"          # широкий
-```
-
-**Почему это LLM-проверка, а не скриптовая.** Иерархия доменов («RL — поддомен ML») — это знание о мире, не структурное свойство wiki. Скриптовые подсчёты («больше страниц = шире») ломаются при появлении нового широкого домена (он начнёт с count=1) или при наличии cross-cutting узкого. Агент же использует общее знание: видит «Reinforcement Learning» и «Machine Learning» — понимает, что первое ⊂ второго.
-
-Поведение агента:
-1. Для каждой страницы с ≥2 доменами в frontmatter
-2. Применить семантическое суждение о их относительной широте/узости
-3. Если порядок не соответствует «от частного к общему» — добавить issue:
-   ```json
-   {
-     "type": "domain-order",
-     "where": "wiki/ideas/PPO.md",
-     "current": ["Machine Learning", "Reinforcement Learning"],
-     "expected": ["Reinforcement Learning", "Machine Learning"],
-     "reasoning": "RL — поддомен ML"
-   }
-   ```
-4. Если домены разнородные и иерархии нет (например, `[Machine Learning, Knowledge Management]` — параллельные) — пропустить без issue
-
-Категория: **auto-fix** — ingest применяет переупорядочивание молча, без подтверждения. Reasoning заносится в issue для возможного аудита. Если агент не уверен в иерархии (например, для параллельных доменов вроде ML+KM) — issue не создаётся вовсе, страница не трогается.
-
----
-
-## Категории issues
-
-Каждый issue в `open_issues` имеет поле `type` — категория. По типу `ingest` решает, как с ним поступить.
-
-### Auto-fix (ingest правит молча)
-
-Детерминистические нарушения схемы, единственный очевидный fix:
-
-| `type` | Условие | Структура issue |
-|---|---|---|
-| `status-not-in-enum` | `status` не из `evaluation/in-progress/ready` | `{type, where, value, fix: "in-progress"}` |
-| `invalid-fields` | frontmatter не соответствует схеме из `_templates/<type>.md`. Два subtype: `extra` (поле есть, в шаблоне нет — удалить) и `missing` (в шаблоне есть, у страницы нет — добавить с default из шаблона). Покрывает старые проверки `status-on-entity`, `legacy-field` и любые другие schema violations. Поле `summary` в `subtype: missing` не флагуется — для него отдельный check (`missing-summary`) с agent-fix | `{type, where, subtype, field}` |
-| `inline-tags` | `tags: [a, b]` инлайн вместо блочного YAML | `{type, where}` |
-| `raw-link-with-extension` | `[[raw/X.md]]` вместо `[[raw/X]]` | `{type, where, link}` |
-| `raw-ref-in-body` | упоминание `[[raw/...]]` в теле страницы | `{type, where, link, line}` |
-| `folder-type-mismatch` | страница лежит в `wiki/<X>/`, но `type:` во frontmatter не соответствует папке | `{type, where, current_type, expected_type}` |
-| `non-canonical-wikilink` | wikilink использует path-prefixed форму (`[[wiki/ideas/RLHF]]`, `[[ideas/RLHF]]`) вместо канонической basename `[[RLHF]]`. raw/-ссылки и `wiki/index.md` не сканируются (index автогенерируется с canonical links). Auto-fix сохраняет `#section\|alias` части | `{type, where, link, fix, context}` |
-| `domain-order` | LLM-проверка (Layer 2): `domain:` не упорядочен от частного к общему. Агент использует семантическое знание о соотношении доменов (`RL ⊂ ML`). Auto-fix переписывает блок в порядке из `expected`. Параллельные домены (без иерархии) агент пропускает | `{type, where, current, expected, reasoning}` |
-| `missing-summary` | content-страница (idea/entity/domain/question) без непустого `summary:` во frontmatter. Auto-fix: ingest читает первый абзац, генерирует декларативное саммари ≤120 символов и вставляет в frontmatter. На следующем Stop-hook'е `bin/gen_index.py` подхватит саммари в `wiki/index.md` | `{type, where, page_type}` |
-| `binary-source-outside-formats` | бинарный файл (.pdf/.docx/audio) лежит в `raw/` вне папки `raw/formats/`. Auto-fix через `bin/rename_wiki_page.py <where> <suggested>` — скрипт обновит wikilinks (если есть `![[raw/X.pdf]]`-embeds), потом сделает `mv`. Безопасно: канон строгий (бинари → `raw/formats/`), legitimate cases отсутствуют | `{type, where, suggested}` |
-
-### Ask user (ingest спрашивает решение)
-
-Требует суждения:
-
-| `type` | Условие | Структура issue |
-|---|---|---|
-| `dead-link` | wikilink на несуществующую страницу | `{type, where, what, context}` |
-| `orphan` | страница без входящих wikilinks | `{type, where}` |
-| `missing-concept` | концепция упомянута в ≥3 страницах без своей wiki-страницы | `{type, term, mentioned_in: [...]}` |
-| `contradiction` | противоречие между утверждениями двух страниц | `{type, page_a, page_b, claim}` |
-| `outdated-claim` | утверждение в `[[A]]` потенциально опровергнуто `[[B]]` | `{type, where, claim, conflicts_with}` |
-| `dangling-domain-ref` | страница имеет в `domain:` frontmatter ссылку на несуществующую domain-страницу | `{type, where, missing_domain}` |
-| `asymmetric-related` | у страницы `[[A]]` в `related:` есть `[[B]]`, но у `[[B]]` в `related:` нет `[[A]]` | `{type, page_a, page_b}` |
-| `similar-but-unlinked` | две страницы семантически близки (cosine выше порога), но wikilink между ними отсутствует. Только в режиме `--approx` | `{type, page_a, page_b, similarity, threshold}` |
-| `synthesis-drift` | wiki-страница семантически далеко ушла от центроида эмбеддингов своих источников. Сигнал о возможной галлюцинации синтеза. Только в режиме `--approx` | `{type, where, drift, threshold}` |
-
-### Skip (только записываем, не спрашиваем)
-
-Информационные флаги — пользователю не задаём вопрос:
-
-| `type` | Условие |
-|---|---|
-| `style-nit` | не декларативное настоящее, отсутствие линка на не-ключевую сущность |
-
----
-
-## Проверки
-
-| # | Проверка | Категория |
-|---|---|---|
-| 1 | Сирота (нет входящих wikilinks) | ask |
-| 2 | Мёртвая ссылка | ask |
-| 3 | Устаревшее утверждение | ask |
-| 4 | Пропущенная концепция (≥3 упоминания) | ask |
-| 5 | Противоречие | ask |
-| 6 | `status` вне enum | auto-fix |
-| 7 | `status` на entity | auto-fix |
-| 8 | Поля старой схемы (`title`/`complexity`/`first_mentioned`) | auto-fix |
-| 9 | Tags casing (lowercase аббревиатур) | auto-fix |
-| 10 | Tags inline-формат | auto-fix |
-| 11 | `[[raw/X.md]]` (с расширением) в `sources` | auto-fix |
-| 12 | Raw-refs в теле страницы | auto-fix |
-| 13 | "Sources"-секция с одним raw | auto-fix |
-| 13.1 | Папка vs `type:` во frontmatter | auto-fix |
-| 13.2 | Битые строки в `index.md` (ссылка на удалённую страницу) | auto-fix |
-| 13.3 | Страница есть, строки в `index.md` нет | ask |
-| 13.4 | `domain:` ссылается на несуществующую domain-страницу | ask |
-| 13.5 | Асимметричные `related:` (A→B без B→A) | ask |
-| 13.6 | Бинарный источник вне `raw/formats/` | ask |
-| 13.7 | Path-prefixed wikilinks (`[[wiki/X/Y]]` вместо `[[Y]]`) | auto-fix |
-| 14 | Пустые секции | skip |
-| 15 | Стилистические нарушения | skip |
-| 16 | `similar-but-unlinked` (только `--approx`) | ask |
-| 17 | `synthesis-drift` (только `--approx`) | ask |
-
----
-
-## Конвенции
-
-| Элемент | Конвенция | Пример |
-|---|---|---|
-| Имена файлов | Title Case с пробелами | `Reward Model.md` |
-| Папки | lowercase | `wiki/ideas/`, `wiki/entities/` |
-| Теги | аббревиатуры заглавными, обычные слова с заглавной первой буквы | `ML`, `RL`, `Alignment` |
-| Wikilinks | точно совпадают с именем файла | `[[Reward Model]]` |
-| `[[raw/...]]` | без расширения `.md`, только в `sources` frontmatter | `[[raw/RLHF]]` |
-
-Имена файлов уникальны по всему vault — wikilinks без путей работают только при уникальности.
+См. `.claude/skills/wiki/references/frontmatter.md` — schema, теги, regex
+имён файлов и т.д. Здесь не дублируем.
 
 ---
 
 ## Что lint не делает
 
-- Не правит content-файлы. Никогда.
-- Не создаёт стаб-страницы. Не предлагает создавать в `auto-fix` категории — это всегда `ask`.
-- Не удаляет файлы. Сирот только флагает.
-- Не разрешает противоречия. Только описывает.
-- **Не проверяет порядок доменов скриптовой эвристикой.** Convention «от частного к общему» проверяется в Layer 2 (LLM) — там агент использует семантическое знание о соотношении доменов. Скриптовые подсчёты member-pages здесь ненадёжны (молодая wiki, новые широкие домены). См. секцию «Domain-order» выше.
-
-Все правки делает `ingest` (через Phase 8 после синтеза или через `/ingest --fix` вне цикла).
+- **Не лезет в `raw/`.** raw-источники иммутабельны (кроме transcript-конвертации
+  через `transcribe`).
+- **Не правит content-файлы по ask-issues самостоятельно.** Только после
+  явного решения пользователя.
+- **Не запускает синтез.** Это работа `ingest`. lint только чинит.
+- **Не удаляет файлы без явного «удалить» от пользователя** (на orphan).

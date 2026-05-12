@@ -1,6 +1,6 @@
 # Synthesis Workflow — фазы 1-7
 
-Восемь фаз всего. Phase 8 (lint review) — отдельный документ `references/lint-fix.md`.
+Восемь фаз всего. Phase 8 (lint review) — делегируется в `/lint`, см. `.claude/skills/lint/SKILL.md`.
 
 Никаких сокращений или импровизации последовательности — каждая фаза имеет свою цель.
 
@@ -258,4 +258,4 @@
 
 ## После Phase 7
 
-Перейти к Phase 8 — Lint review. Детали в `references/lint-fix.md`.
+Перейти к Phase 8 — Lint review. Полный pipeline (script auto-fixes + Layer 2 + agent fixes + ask-dialogue) делегируется скиллу `/lint`. Детали — `.claude/skills/lint/SKILL.md`.

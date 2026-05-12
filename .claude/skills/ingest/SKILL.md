@@ -20,8 +20,9 @@ description: "Загрузка источников в Obsidian wiki-vault. Чи
 | `/ingest [источник]` | Стандартный режим: прочитать → обсудить ключевые выводы → синтезировать страницы |
 | `/ingest --auto [источник]` | Автоматический режим: пропустить обсуждение, сразу синтезировать |
 | `/ingest --force [источник]` | Принудительный пересинтез: игнорировать дедуп через manifest |
-| `/ingest --fix` | Режим починки: без источника, обработать `open_issues` из `wiki/meta/lint-reports/lint-state.json` |
 | `/ingest [несколько источников]` | Пакетный режим (см. ниже) |
+
+Для починки накопленных issues без нового источника — `/lint`. Он сам запустит script auto-fixes, agent fixes и ask-dialogue.
 
 ---
 
@@ -33,7 +34,6 @@ description: "Загрузка источников в Obsidian wiki-vault. Чи
 | **PDF/DOCX** (`raw/formats/<file>` или `raw/<file>`) | сначала вызвать `/transcribe` → восстановленный `.md` в `raw/` → Synthesis Workflow |
 | **URL** (`https://...`) | `references/url-ingestion.md` (defuddle + URL-дедуп) → Synthesis Workflow |
 | **Изображение** (`.png`/`.jpg`/`.jpeg`/`.gif`/`.webp`/`.svg`/`.avif`) | секция Image ingestion ниже → Synthesis Workflow |
-| **Без источника** (`--fix`) | сразу `references/lint-fix.md` (Fix-only mode) |
 
 ---
 
@@ -50,10 +50,10 @@ description: "Загрузка источников в Obsidian wiki-vault. Чи
 | 5 | Связать страницы | frontmatter (sources/related/tags/domain) + inline wikilinks |
 | 6 | Обновить инфраструктуру | log.md (запись сверху, append-only) + cache.md (**overwrite целиком**, ~500 слов) + summary.md (overwrite). `wiki/index.md` **не трогать** — генерируется автоматически из `summary:` во frontmatter каждой страницы (см. ниже). |
 | 7 | Domain proposal | Если порог N=10 пройден тегом без domain — предложить создать |
-| 8 | Lint review | lint (read-only) → применить `open_issues` (auto-fix / ask / skip) |
+| 8 | Lint review | вызвать `/lint` — он сам запустит `bin/static_lint.py`, применит script auto-fixes, agent auto-fixes, проведёт ask-dialogue с пользователем |
 
 **Полные детали фаз 1-7:** `references/synthesis-phases.md`.
-**Полные детали Phase 8 + Fix-only:** `references/lint-fix.md`.
+**Полный pipeline Phase 8:** `.claude/skills/lint/SKILL.md` — ingest просто делегирует.
 
 После Phase 8 — записать запись в `raw/meta/ingested.json` (см. `references/dedup.md`).
 

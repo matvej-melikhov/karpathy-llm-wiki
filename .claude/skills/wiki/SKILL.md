@@ -137,7 +137,7 @@ python3 bin/rename_wiki_page.py <old_path> <new_path>
 - `Write` нового файла + `Bash rm` старого — то же самое, плюс лишняя работа.
 - Через Obsidian UI — это работает (Obsidian сам обновляет ссылки), но Claude не запускает Obsidian, поэтому для агентских правок этот путь недоступен.
 
-Скрипт работает только с canonical-формой ссылок. Если в vault'е есть legacy non-canonical (`[[wiki/ideas/Old]]`, `[[raw/X.md]]`) — они **не обновятся** скриптом. Это работа `lint` (`non-canonical-wikilink`, `raw-link-with-extension` — auto-fix). Если такие появились — следующий `/lint` + ingest fix-only их зачистит.
+Скрипт работает только с canonical-формой ссылок. Если в vault'е есть legacy non-canonical (`[[wiki/ideas/Old]]`, `[[raw/X.md]]`) — они **не обновятся** скриптом. Это работа `lint` (`non-canonical-wikilink`, `raw-link-with-extension` — script auto-fix в `bin/static_lint.py`). Если такие появились — следующий `/lint` их зачистит.
 
 ---
 
