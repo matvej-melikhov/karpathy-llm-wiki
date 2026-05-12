@@ -1,22 +1,26 @@
 #!/usr/bin/env python3
-"""Knowledge map: UMAP-projected wiki visualization with statistics.
+"""Knowledge map: dual-view wiki visualization with statistics.
 
-Generates two artifacts on each run:
+Generates three artifacts on each run:
 
-    _attachments/knowledge-map-YYYY-MM-DD.html       interactive Plotly viz
-    wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD.md    markdown with stats + iframe
+    _attachments/knowledge-map-YYYY-MM-DD.html       Cytoscape (UMAP-pinned)
+    _attachments/wiki-graph-YYYY-MM-DD.html          Cytoscape (fcose-layout)
+    wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD.md    markdown with stats + iframes
 
-The .md page is versioned (timestamp in filename) so successive runs form
-a history of wiki growth, like lint-report-*.md. The HTML is the canonical
-view — embedded into the .md via iframe so Obsidian renders the
-interactive Plotly figure directly in reading mode.
+Both HTMLs run on the same Cytoscape.js stack (vendored in bin/vendor/) —
+the difference is layout, not engine:
 
-Visualization:
-- Each content page is one point in 2D UMAP-projected space.
-- Color of a point is the average of its domain colors (multi-domain
-  pages get a blended hue). Pages without domain are gray.
-- Domain pages are larger and labeled.
-- Wikilink edges are drawn as light gray lines (off via --no-edges).
+- knowledge-map: positions pinned to UMAP coordinates → proximity on
+  screen = semantic similarity. Louvain compound parents disabled to keep
+  the semantic reading clean.
+- wiki-graph: fcose force-directed layout → proximity on screen =
+  densely linked. Compound parents make Louvain communities visually
+  obvious; bridge nodes get a gold-haloed star shape.
+
+The .md page embeds both as iframes (via file:// URLs that Obsidian's
+iframe sandbox accepts) and adds counts, connectivity, Louvain diagnostics,
+and semantic-similarity distributions. Versioned filenames build a history
+of wiki growth, like lint-report-*.md.
 
 Pipeline parts:
 - build_dataset: collect (name, vec, domains, links) for content pages
@@ -24,13 +28,15 @@ Pipeline parts:
 - assign_domain_colors / blend_domain_colors: multi-domain RGB blend
 - build_edges: undirected page-pair edges from wikilinks
 - compute_statistics: counts, connectivity, semantic structure
-- render_figure: Plotly Figure (lazy import)
-- render_artifact_page: markdown for wiki/meta/kn-maps/
+- compute_graph_structure: Louvain communities + bridges + sparse clusters
+- wiki_graph.render_cytoscape_html: shared HTML renderer (preset / fcose)
+- render_artifact_page: combined markdown for wiki/meta/kn-maps/
 
 Usage:
-    python3 bin/knowledge_map.py                # full output
-    python3 bin/knowledge_map.py --no-edges     # skip edge overlay
-    python3 bin/knowledge_map.py --no-page      # only files, skip artifact md
+    python3 bin/knowledge_map.py                # both HTMLs + markdown
+    python3 bin/knowledge_map.py --no-edges     # skip edge overlay on UMAP
+    python3 bin/knowledge_map.py --no-graph     # skip force-directed HTML
+    python3 bin/knowledge_map.py --no-page      # only HTMLs, skip markdown
     python3 bin/knowledge_map.py --seed 7       # deterministic UMAP
 """
 
@@ -235,7 +241,7 @@ def hex_to_rgb(h: str) -> tuple[int, int, int]:
     Accepts:
     - hex with hash:    "#aabbcc"
     - hex without hash: "aabbcc"
-    - rgb function:     "rgb(170, 187, 204)" (Plotly's qualitative.Bold etc.)
+    - rgb function:     "rgb(170, 187, 204)" (CSS-style accepted by some palettes)
     """
     s = h.strip()
     if s.startswith("rgb"):
@@ -433,185 +439,139 @@ def compute_statistics(infos: list[PageInfo]) -> dict[str, Any]:
 
 
 # ────────────────────────────────────────────────────────────────────────
-# Plotly figure (lazy import — viz deps optional for tests)
+# Graph topology: Louvain communities, bridge nodes, sparse clusters
 # ────────────────────────────────────────────────────────────────────────
+#
+# Topological signal complements the semantic UMAP picture. UMAP groups
+# pages by embedding similarity — what they're "about". Louvain groups
+# them by who-cites-whom — how the wiki is actually wired. Divergence
+# between the two views is informative.
+#
+# Two derived diagnostics:
+# - Bridge nodes: pages whose wikilinks span multiple communities.
+#   Participation coefficient quantifies it; high P + high degree = a hub
+#   carrying cross-area connectivity. Improving such a page lifts several
+#   areas at once.
+# - Sparse communities: clusters Louvain found, but whose members barely
+#   link to each other internally (cohesion below threshold). The topic is
+#   implicitly there, but cross-links are missing — an under-developed area.
+#
+# All thresholds are conservative so this is silent on small/healthy vaults.
+
+_LOUVAIN_SEED = 42
+_MIN_COMMUNITY_SIZE = 3              # below this, communities are not surfaced
+_TOP_BRIDGES = 5
+_SPARSE_COHESION_THRESHOLD = 0.15    # 2e / n(n-1) below this → "sparse"
 
 
-def render_figure(
+def compute_graph_structure(
     infos: list[PageInfo],
-    coords,
     edges: list[tuple[int, int]],
-    domain_to_color: dict[str, str],
-    show_edges: bool,
-):
-    """Build a Plotly figure with domain-grouped legend.
+) -> dict[str, Any] | None:
+    """Run Louvain + bridge/sparse analysis on the wikilink graph.
 
-    Legend groups points by **primary domain** (first in `info.domains`)
-    so the colored swatches in the legend honestly correspond to colors
-    on the map. Page type controls only marker size (domain hubs larger),
-    documented in the artifact-page caption — not in the legend.
+    Returns None if networkx is missing, the graph has no edges, or it has
+    fewer than _MIN_COMMUNITY_SIZE nodes (community detection meaningless).
+
+    Result dict:
+    - communities:        list[list[str]] of communities with size >= MIN
+    - all_communities_count, singleton_communities: counts before filtering
+    - modularity:         Q score of the partition (typically 0.3–0.7)
+    - bridges:            top-K nodes by participation coefficient,
+                          each {name, participation, degree, spans}
+    - sparse:             communities below cohesion threshold,
+                          each {members, size, cohesion, internal_edges}
     """
-    import plotly.graph_objects as go
-
-    fig = go.Figure()
-
-    _NO_DOMAIN_KEY = "_no_domain"
-    _NO_DOMAIN_COLOR = "#6B7280"  # neutral gray-500 (visible on dark bg)
-    _NO_DOMAIN_LABEL = "без домена"
-
-    _TYPE_LABEL = {
-        "domain": "домен", "idea": "идея",
-        "entity": "сущность", "question": "вопрос",
-    }
-
-    # Dark-theme color tokens (Tailwind-inspired)
-    _BG = "#0F1419"          # plot/paper background
-    _TEXT = "#E5E7EB"        # primary light gray text
-    _TEXT_MUTED = "#9CA3AF"  # muted text
-    _GRID = "rgba(255,255,255,0.04)"
-    _OUTLINE = "#1F2937"     # marker stroke on dark bg
-    _OUTLINE_HUB = "#F9FAFB" # white-ish stroke for domain hubs
-    _EDGE = "rgba(129,140,248,0.18)"  # subtle indigo edges
-
-    # ─── edges first (render behind nodes) ──────────────────────────
-    if show_edges and edges:
-        edge_xs: list[float | None] = []
-        edge_ys: list[float | None] = []
-        for src, tgt in edges:
-            edge_xs.extend([float(coords[src, 0]), float(coords[tgt, 0]), None])
-            edge_ys.extend([float(coords[src, 1]), float(coords[tgt, 1]), None])
-        fig.add_trace(go.Scatter(
-            x=edge_xs, y=edge_ys,
-            mode="lines",
-            line=dict(color=_EDGE, width=0.6),
-            hoverinfo="skip",
-            showlegend=False,
-            name="wikilinks",
-        ))
-
-    # ─── group nodes by primary domain ──────────────────────────────
-    # Primary domain = first item in info.domains (= first wikilink in the
-    # page's `domain:` frontmatter field). Schema convention: list from
-    # specific to general (e.g., [Reinforcement Learning, Machine Learning]).
-    # The lint check `domain-order` enforces this ordering across the wiki.
-    by_primary: dict[str, list[int]] = {}
-    for i, info in enumerate(infos):
-        primary = info.domains[0] if info.domains else _NO_DOMAIN_KEY
-        by_primary.setdefault(primary, []).append(i)
-
-    # Stable order: domains by member count desc, then alphabetical;
-    # "без домена" last.
-    domain_order = sorted(
-        (k for k in by_primary if k != _NO_DOMAIN_KEY),
-        key=lambda d: (-len(by_primary[d]), d),
-    )
-    if _NO_DOMAIN_KEY in by_primary:
-        domain_order.append(_NO_DOMAIN_KEY)
-
-    type_size = {"domain": 26, "idea": 14, "entity": 14, "question": 14}
-
-    for domain in domain_order:
-        idxs = by_primary[domain]
-        legend_name = _NO_DOMAIN_LABEL if domain == _NO_DOMAIN_KEY else domain
-        legend_clean_color = (
-            domain_to_color.get(domain, _NO_DOMAIN_COLOR)
-            if domain != _NO_DOMAIN_KEY else _NO_DOMAIN_COLOR
+    try:
+        import networkx as nx
+        from networkx.algorithms.community import (
+            louvain_communities,
+            modularity as nx_modularity,
         )
+    except ImportError:
+        return None
 
-        xs = [float(coords[i, 0]) for i in idxs]
-        ys = [float(coords[i, 1]) for i in idxs]
-        # Per-point color: blended RGB if multi-domain, primary color otherwise.
-        # Visually preserves the "between clusters" hue for boundary pages.
-        point_colors = [
-            blend_domain_colors(
-                infos[i].domains, domain_to_color, default=_NO_DOMAIN_COLOR,
-            )
-            for i in idxs
-        ]
-        sizes = [type_size.get(infos[i].page_type, 12) for i in idxs]
-        line_widths = [2 if infos[i].page_type == "domain" else 0.8 for i in idxs]
-        line_colors = [
-            _OUTLINE_HUB if infos[i].page_type == "domain" else _OUTLINE
-            for i in idxs
-        ]
-        labels = [
-            infos[i].name if infos[i].page_type == "domain" else ""
-            for i in idxs
-        ]
-        hover = [
-            f"<b>{infos[i].name}</b><br>"
-            f"тип: {_TYPE_LABEL.get(infos[i].page_type or '', infos[i].page_type or '—')}<br>"
-            f"домены: {', '.join(infos[i].domains) or '—'}<br>"
-            f"входящих: {len(infos[i].inbound)} · "
-            f"исходящих: {len(infos[i].body_links | infos[i].fm_links)}"
-            for i in idxs
-        ]
+    if len(infos) < _MIN_COMMUNITY_SIZE or not edges:
+        return None
 
-        # Single trace per domain — uniform color = primary domain color.
-        # No blending: first domain wins both in the legend AND in the dot.
-        fig.add_trace(go.Scatter(
-            x=xs, y=ys,
-            mode="markers+text" if any(labels) else "markers",
-            marker=dict(
-                size=sizes,
-                color=legend_clean_color,
-                line=dict(width=line_widths, color=line_colors),
-                opacity=0.92,
-            ),
-            text=labels,
-            textposition="top center",
-            textfont=dict(size=13, color=_TEXT, family="Inter, sans-serif"),
-            hovertext=hover,
-            hoverinfo="text",
-            name=legend_name,
-        ))
+    # Build undirected weighted graph. build_edges already dedupes pairs,
+    # so all weights start at 1.0. Multi-graph weights would aggregate
+    # here naturally if we ever switch to a counted edge model.
+    G = nx.Graph()
+    name_of = [info.name for info in infos]
+    G.add_nodes_from(name_of)
+    for src_idx, tgt_idx in edges:
+        G.add_edge(name_of[src_idx], name_of[tgt_idx], weight=1.0)
 
-    # ─── layout ─────────────────────────────────────────────────────
-    # Modern dark-dashboard styling (Stripe / Linear / Notion vibe):
-    # - dark background with desaturated accent colors
-    # - Inter font, light-gray text
-    # - left-aligned title, horizontal legend on top
-    # - axes invisible, equal aspect via scaleanchor preserves distances
-    # - figure is responsive (autosize) — fills iframe/container
-    fig.update_layout(
-        title=dict(
-            text="<b>Карта знаний wiki</b>",
-            x=0.03, xanchor="left",
-            y=0.97, yanchor="top",
-            font=dict(size=20, family="Inter, sans-serif", color=_TEXT),
-            pad=dict(t=10, l=10),
-        ),
-        font=dict(family="Inter, sans-serif", color=_TEXT, size=12),
-        xaxis=dict(visible=False),
-        yaxis=dict(
-            visible=False,
-            scaleanchor="x", scaleratio=1,
-        ),
-        paper_bgcolor=_BG,
-        plot_bgcolor=_BG,
-        autosize=True,
-        margin=dict(l=40, r=20, t=80, b=40),
-        legend=dict(
-            title=dict(text=""),
-            orientation="h",
-            x=0.5, xanchor="center",
-            y=-0.02, yanchor="top",
-            bgcolor="rgba(0,0,0,0)",
-            font=dict(size=12, color=_TEXT),
-            itemsizing="constant",
-        ),
-        hoverlabel=dict(
-            bgcolor="rgba(15,20,25,0.95)",
-            bordercolor="#374151",
-            font=dict(family="Inter, sans-serif", color=_TEXT, size=12),
-        ),
-        modebar=dict(
-            bgcolor="rgba(0,0,0,0)",
-            color=_TEXT_MUTED,
-            activecolor=_TEXT,
-        ),
+    # Louvain. seed fixes the partition across runs — Louvain is greedy
+    # and order-sensitive, so without a seed successive snapshots could
+    # show "different" structure that's actually just stochastic jitter.
+    raw_comms = louvain_communities(G, weight="weight", seed=_LOUVAIN_SEED)
+    comm_lists = sorted(
+        [sorted(c) for c in raw_comms],
+        key=lambda c: (-len(c), c[0] if c else ""),
     )
-    return fig
+    community_of: dict[str, int] = {}
+    for ci, members in enumerate(comm_lists):
+        for n in members:
+            community_of[n] = ci
+    Q = nx_modularity(G, raw_comms, weight="weight")
+
+    # Participation coefficient — Guimera & Amaral 2005. P=0 if all of a
+    # node's neighbors live in one community (provincial node), P→1−1/k
+    # if neighbors are evenly spread across k communities (bridge).
+    bridges: list[dict[str, Any]] = []
+    for node in G.nodes():
+        deg_per_c: dict[int, float] = {}
+        total = 0.0
+        for nbr in G.neighbors(node):
+            if nbr == node:
+                continue
+            c = community_of[nbr]
+            w = G[node][nbr].get("weight", 1.0)
+            deg_per_c[c] = deg_per_c.get(c, 0.0) + w
+            total += w
+        if total == 0 or len(deg_per_c) < 2:
+            continue  # provincial node — not a bridge by definition
+        p = 1.0 - sum((d / total) ** 2 for d in deg_per_c.values())
+        bridges.append({
+            "name": node,
+            "participation": round(p, 3),
+            "degree": int(round(total)),
+            "spans": len(deg_per_c),
+        })
+    # Tie-break on degree (a high-P node spanning more links is more useful
+    # than a high-P node with one link to each of two clusters), then name.
+    bridges.sort(key=lambda b: (-b["participation"], -b["degree"], b["name"]))
+    bridges = bridges[:_TOP_BRIDGES]
+
+    # Sparse communities — internal density 2e / n(n-1). Communities of
+    # size 1–2 don't have meaningful density; skip via _MIN_COMMUNITY_SIZE.
+    sparse: list[dict[str, Any]] = []
+    for members in comm_lists:
+        n = len(members)
+        if n < _MIN_COMMUNITY_SIZE:
+            continue
+        sub = G.subgraph(members)
+        e = sub.number_of_edges()
+        cohesion = 2 * e / (n * (n - 1))
+        if cohesion < _SPARSE_COHESION_THRESHOLD:
+            sparse.append({
+                "members": list(members),
+                "size": n,
+                "cohesion": round(cohesion, 3),
+                "internal_edges": e,
+            })
+    sparse.sort(key=lambda s: (s["cohesion"], -s["size"]))
+
+    return {
+        "communities": [c for c in comm_lists if len(c) >= _MIN_COMMUNITY_SIZE],
+        "all_communities_count": len(comm_lists),
+        "singleton_communities": sum(1 for c in comm_lists if len(c) == 1),
+        "modularity": round(Q, 3),
+        "bridges": bridges,
+        "sparse": sparse,
+    }
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -619,22 +579,173 @@ def render_figure(
 # ────────────────────────────────────────────────────────────────────────
 
 
+def _render_graph_sections(
+    graph: dict[str, Any],
+    *,
+    graph_iframe_src: str | None = None,
+    graph_html_filename: str | None = None,
+) -> list[str]:
+    """Render the topology block for the artifact page: optional Cytoscape
+    iframe + Russian markdown sections (communities, bridges, sparse).
+    Empty list if nothing meaningful to report.
+
+    The iframe (if provided) sits at the top of the topology block so the
+    visual is adjacent to its statistics, mirroring the UMAP-map / stats
+    pairing earlier on the page.
+    """
+    out: list[str] = []
+    comms = graph.get("communities") or []
+    Q = graph.get("modularity", 0.0)
+
+    out.extend([
+        "",
+        "## Топология wiki (Louvain)",
+        "",
+        "Это **второй взгляд** на структуру vault — не по эмбеддингам "
+        "(семантика), а по wikilinks (как страницы реально друг друга "
+        "цитируют). Алгоритм Louvain находит группы страниц с плотными "
+        "связями внутри и слабыми наружу — реальные «кусты» твоей вики.",
+    ])
+
+    if graph_iframe_src is not None:
+        out.extend([
+            "",
+            f'<iframe src="{graph_iframe_src}" '
+            'style="width:100%; aspect-ratio: 4 / 3; border:1px solid #ccc; '
+            'border-radius:6px; display:block;"></iframe>',
+            "",
+            "Force-directed раскладка (fcose): близость на экране = "
+            "плотность связей. **Цвет** — primary domain (как на UMAP-карте "
+            "выше). **Размер** — √(число связей). **Золотая обводка** — "
+            "узлы-мосты. **Облака** — сообщества Louvain. "
+            "Hover по узлу подсвечивает соседей.",
+        ])
+        if graph_html_filename:
+            out.append("")
+            out.append(
+                f"Если iframe не отобразился, открой "
+                f"`_attachments/{graph_html_filename}` в браузере напрямую."
+            )
+
+    out.extend([
+        "",
+        "**Модулярность Q** — глобальная оценка качества разбиения. "
+        "Чем выше, тем чётче кусты отделены друг от друга. "
+        "Типичный диапазон для содержательных графов: 0.3–0.7. "
+        "Q ниже 0.3 — структура слабо выражена (мало связей или они "
+        "распределены равномерно).",
+        "",
+        f"- Q = **{Q:.3f}**",
+        f"- Сообществ всего: **{graph.get('all_communities_count', 0)}** "
+        f"(из них одиночек: {graph.get('singleton_communities', 0)})",
+        f"- Сообществ ≥ {_MIN_COMMUNITY_SIZE} страниц: **{len(comms)}**",
+    ])
+
+    if comms:
+        out.extend([
+            "",
+            "| # | Размер | Страницы |",
+            "|---:|---:|---|",
+        ])
+        for i, members in enumerate(comms, start=1):
+            preview = ", ".join(f"[[{m}]]" for m in members[:5])
+            if len(members) > 5:
+                preview += f", … (+{len(members) - 5})"
+            out.append(f"| {i} | {len(members)} | {preview} |")
+        out.append("")
+        out.append(
+            "Сравни этот разрез с раскраской на карте по `domain:`. "
+            "Совпадения подтверждают, что заявленная структура vault "
+            "соответствует реальной топологии. Расхождения — самое "
+            "интересное: либо домен размазан по нескольким сообществам "
+            "(возможно, его пора делить), либо одно сообщество тянет "
+            "страницы из разных доменов (междисциплинарная область)."
+        )
+
+    bridges = graph.get("bridges") or []
+    out.extend([
+        "",
+        "## Узлы-мосты",
+        "",
+        "Страницы, чьи wikilinks ведут сразу в несколько сообществ. "
+        "Метрика — **participation coefficient** $P$ "
+        "(0 = все ссылки в одном сообществе, ~1 = равномерно по нескольким). "
+        "Высокий $P$ + много связей = страница, держащая на себе "
+        "междисциплинарные нити vault. Стоит вкладываться: улучшение бьёт "
+        "по нескольким областям сразу.",
+    ])
+    if bridges:
+        out.extend([
+            "",
+            "| Страница | $P$ | Связей | Сообществ |",
+            "|---|---:|---:|---:|",
+        ])
+        for b in bridges:
+            out.append(
+                f"| [[{b['name']}]] | {b['participation']:.3f} | "
+                f"{b['degree']} | {b['spans']} |"
+            )
+    else:
+        out.append("")
+        out.append("_Нет страниц, связывающих два или более сообществ. "
+                   "Либо граф ещё мал, либо сообщества полностью изолированы._")
+
+    sparse = graph.get("sparse") or []
+    out.extend([
+        "",
+        "## Разреженные сообщества",
+        "",
+        "Сообщества, которые Louvain собрал в кластер, но внутри которых "
+        "страницы почти не цитируют друг друга. Метрика — **внутренняя "
+        "плотность** $\\rho = 2e / n(n-1)$ (доля реализованных рёбер от "
+        f"возможных). Порог: $\\rho < {_SPARSE_COHESION_THRESHOLD}$ при "
+        f"размере ≥ {_MIN_COMMUNITY_SIZE} страниц.",
+        "",
+        "Сигнал «область заявлена, но недокручена»: связи между этими "
+        "страницами стоит явно прописать — либо это ложный кластер, и его "
+        "стоит проигнорировать.",
+    ])
+    if sparse:
+        out.extend([
+            "",
+            "| Размер | $\\rho$ | Внутренних рёбер | Страницы |",
+            "|---:|---:|---:|---|",
+        ])
+        for s in sparse:
+            preview = ", ".join(f"[[{m}]]" for m in s["members"][:6])
+            if len(s["members"]) > 6:
+                preview += f", … (+{len(s['members']) - 6})"
+            out.append(
+                f"| {s['size']} | {s['cohesion']:.3f} | "
+                f"{s['internal_edges']} | {preview} |"
+            )
+    else:
+        out.append("")
+        out.append("_Все сообщества достаточно плотные — "
+                   "разреженных не обнаружено._")
+
+    return out
+
+
 def render_artifact_page(
     stats: dict[str, Any],
     html_filename: str,
     generated_at: str,
     iframe_src: str | None = None,
+    graph: dict[str, Any] | None = None,
+    graph_html_filename: str | None = None,
+    graph_iframe_src: str | None = None,
 ) -> str:
     """Render the wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD.md artifact.
 
     Output is in Russian, uses markdown tables for stats, and embeds the
-    interactive Plotly HTML via an iframe (Obsidian renders it in reading
-    mode). No PNG embed — the iframe is the canonical view.
+    Cytoscape HTMLs via iframes (Obsidian renders them in reading mode).
+    No PNG embed — the iframes are the canonical view.
 
-    iframe_src is the URL the iframe points to. Caller should construct it
-    via Obsidian's `app://local/<absolute-path>` scheme — Obsidian's iframe
-    sandbox blocks file://, relative paths, and (in some configs)
-    app://obsidian.md/, but app://local/ works for local files.
+    iframe_src / graph_iframe_src are the URLs the iframes point to.
+    Caller should construct them as file:// URLs against the absolute path
+    of the generated HTML files; that scheme passes Obsidian's iframe
+    sandbox reliably.
     """
     total_pages = sum(stats["type_counts"].values())
 
@@ -680,10 +791,13 @@ def render_artifact_page(
         "самый специфичный. Например, у страницы с "
         "`[Reinforcement Learning, Machine Learning]` цвет — RL. "
         "Полный список доменов виден в hover. Серый — страница без домена.",
-        "- **Размер** — тип страницы: domain-страницы (хабы) крупнее остальных. "
-        "Тип в легенде не показан, чтобы не путать с цветом.",
+        "- **Размер** — тип страницы: domain-хабы крупнее, остальные одного "
+        "размера. Семантическая карта намеренно не кодирует число связей — "
+        "топологические сигналы живут на форс-графе ниже.",
         "- **Линии** — wikilinks между страницами (полупрозрачные). "
         "Видно где явные связи совпадают с семантическими, а где расходятся.",
+        "- **Hover** на узле подсвечивает его 1-hop соседей и затемняет "
+        "остальное — удобно для исследования окрестности страницы.",
         "",
         "Когерентный кластер — много точек одного цвета рядом. Если страница "
         "оторвалась от своего цветового кластера — её эмбеддинг ушёл в чужую "
@@ -726,6 +840,14 @@ def render_artifact_page(
         lines.append(
             f"| Самая связанная | [[{top['name']}]] ({top['inbound']} входящих) |"
         )
+
+    # ─── Topological view (Louvain communities + diagnostics) ─────────
+    if graph is not None:
+        lines.extend(_render_graph_sections(
+            graph,
+            graph_iframe_src=graph_iframe_src,
+            graph_html_filename=graph_html_filename,
+        ))
 
     lines.extend([
         "",
@@ -785,24 +907,28 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     ap.add_argument("--no-edges", action="store_true",
-                    help="skip wikilink edge overlay")
+                    help="skip wikilink edge overlay on the UMAP map")
     ap.add_argument("--no-page", action="store_true",
                     help="skip generating wiki/meta/kn-maps/knowledge-map-*.md")
+    ap.add_argument("--no-graph", action="store_true",
+                    help="skip generating the Cytoscape wiki-graph HTML")
     ap.add_argument("--seed", type=int, default=42,
                     help="UMAP random_state for reproducibility (default: 42)")
     ap.add_argument("--out-dir", type=Path, default=Path("_attachments"),
                     help="output directory for HTML/PNG (default: _attachments)")
     args = ap.parse_args()
 
-    # Lazy viz imports — let helper-only tests run without these installed
+    # Lazy viz imports — let helper-only tests run without these installed.
+    # numpy + umap for projection; rendering is pure-Python via wiki_graph.
     try:
         import numpy as np
-        import plotly.colors as pc
         import umap
     except ImportError as e:
         print(f"ERROR: missing dependency '{e.name}'", file=sys.stderr)
         print("Run: pip3 install -r bin/requirements.txt", file=sys.stderr)
         return 2
+
+    from wiki_graph import render_cytoscape_html
 
     # 1. Discover content + load embeddings
     pages = discover_pages()
@@ -837,11 +963,20 @@ def main() -> int:
         f"{len(infos_with_vecs)} with embeddings"
     )
 
-    # 3. UMAP
+    # 3. UMAP. Two non-default knobs tuned to keep clusters from drifting
+    # into the corners on small wiki graphs:
+    # - n_neighbors=25 (default 15) → UMAP weighs more global structure,
+    #   so distinct topics don't get pushed maximally apart.
+    # - min_dist=0.5 (default 0.1) → points inside a cluster spread out,
+    #   reducing the visual gap between clusters relative to cluster size.
+    # Capped at len-1 for very small wikis.
     vecs = np.array([info.vec for info in infos_with_vecs])
-    n_neighbors = min(15, len(infos_with_vecs) - 1)
+    n_neighbors = min(25, len(infos_with_vecs) - 1)
     reducer = umap.UMAP(
-        n_components=2, n_neighbors=n_neighbors, random_state=args.seed,
+        n_components=2,
+        n_neighbors=n_neighbors,
+        min_dist=0.5,
+        random_state=args.seed,
     )
     coords = reducer.fit_transform(vecs)
 
@@ -856,27 +991,60 @@ def main() -> int:
     palette = generate_distinct_palette(max(len(domain_counts), 1))
     domain_to_color = assign_domain_colors(list(domain_counts.keys()), palette)
 
-    # 6. Render figure
-    fig = render_figure(
-        infos_with_vecs, coords, edges, domain_to_color,
-        show_edges=not args.no_edges,
-    )
-
-    # 7. Output files
+    # 6. Output paths
     args.out_dir.mkdir(parents=True, exist_ok=True)
     today = dt.date.today().isoformat()
     base = f"knowledge-map-{today}"
     html_path = args.out_dir / f"{base}.html"
 
-    # Embed plotly.js inline so the HTML is self-contained — Obsidian's
-    # iframe sandbox blocks remote CDN fetches in some configurations.
-    # responsive=True makes the figure fill its container (the iframe).
-    fig.write_html(
-        str(html_path),
-        include_plotlyjs="inline",
-        config={"responsive": True},
+    # 7a. Graph topology (Louvain + bridges + sparse) — used by both views.
+    graph = compute_graph_structure(infos_with_vecs, edges)
+    if graph is None and edges:
+        # Only warn if we *expected* topology; with --no-edges, silence is fine.
+        print(
+            "graph topology skipped: networkx missing or graph too small",
+            file=sys.stderr,
+        )
+
+    # 7b. UMAP semantic map. Same Cytoscape engine as the force graph but
+    # all topology signals (communities, bridge stars, degree-sizing) are
+    # disabled — the semantic view should encode embedding similarity only.
+    # Color stays domain-coded because that's a page attribute, not topology.
+    positions = {
+        info.name: (float(coords[i, 0]), float(coords[i, 1]))
+        for i, info in enumerate(infos_with_vecs)
+    }
+    if args.no_edges:
+        umap_edges: list[tuple[int, int]] = []
+    else:
+        umap_edges = edges
+    umap_html = render_cytoscape_html(
+        infos_with_vecs, umap_edges, graph, domain_to_color,
+        page_title="Карта знаний wiki",
+        subtitle="UMAP-проекция: близость = семантическая близость",
+        positions=positions,
+        with_communities=False,
+        with_bridges=False,
+        size_by_degree=False,
     )
+    html_path.write_text(umap_html, encoding="utf-8")
     print(f"wrote {html_path}")
+
+    # 7c. Force-directed topological graph (fcose layout, with communities).
+    # size_by_degree=False to keep node sizes consistent with the UMAP view
+    # — the topology signal here is delivered by communities, bridges, and
+    # the layout itself; degree-sized nodes added visual noise on top.
+    graph_html_path: Path | None = None
+    if not args.no_graph and edges:
+        graph_html_path = args.out_dir / f"wiki-graph-{today}.html"
+        graph_html = render_cytoscape_html(
+            infos_with_vecs, edges, graph, domain_to_color,
+            page_title="Граф wiki — топология",
+            subtitle="Force-directed (fcose): близость = плотность связей",
+            size_by_degree=False,
+        )
+        graph_html_path.write_text(graph_html, encoding="utf-8")
+        print(f"wrote {graph_html_path}")
 
     # 8. Statistics + artifact page
     if not args.no_page:
@@ -893,8 +1061,21 @@ def main() -> int:
         # previous render even after the HTML file is regenerated.
         cache_buster = dt.datetime.now().strftime("%Y%m%d%H%M%S")
         iframe_src = f"file://{quote(str(abs_html))}?v={cache_buster}"
+
+        graph_iframe_src: str | None = None
+        graph_html_filename: str | None = None
+        if graph_html_path is not None:
+            abs_graph_html = graph_html_path.resolve()
+            graph_iframe_src = (
+                f"file://{quote(str(abs_graph_html))}?v={cache_buster}"
+            )
+            graph_html_filename = graph_html_path.name
+
         page_md = render_artifact_page(
-            stats, html_path.name, generated_at, iframe_src=iframe_src,
+            stats, html_path.name, generated_at,
+            iframe_src=iframe_src, graph=graph,
+            graph_html_filename=graph_html_filename,
+            graph_iframe_src=graph_iframe_src,
         )
         artifact_dir = WIKI_ROOT / "meta" / "kn-maps"
         artifact_dir.mkdir(parents=True, exist_ok=True)

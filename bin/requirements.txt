@@ -5,4 +5,6 @@
 pymupdf4llm>=0.0.27   # PDF → raw markdown for bin/transcribe.py
 pytest>=8.0           # unit tests: python3 -m pytest bin/tests/
 umap-learn>=0.5       # UMAP projection for bin/knowledge_map.py
-plotly>=5.0           # interactive HTML visualization for bin/knowledge_map.py
+networkx>=3.0         # Louvain communities + bridge/sparse analysis for bin/knowledge_map.py
+# Visualization itself runs on Cytoscape.js, vendored under bin/vendor/ —
+# no Python rendering library required.

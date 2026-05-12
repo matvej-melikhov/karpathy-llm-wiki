@@ -1,17 +1,36 @@
 ---
 name: kn-map
 description: >
-  Сгенерировать knowledge map — UMAP-проекцию wiki в 2D с цветом по domain
-  и wikilink-гранями. Wrapper над `bin/knowledge_map.py`. Создаёт два версионированных
-  артефакта: интерактивный Plotly HTML в `_attachments/` и markdown-страницу со
-  статистикой и iframe-embed в `wiki/meta/kn-maps/`.
+  Сгенерировать knowledge map — два дополняющих ракурса на wiki: UMAP-карту
+  по семантической близости и force-directed граф по wikilink-связям.
+  Wrapper над `bin/knowledge_map.py`. Обе карты рендерятся через Cytoscape.js
+  (vendored в `bin/vendor/`). Создаёт три версионированных артефакта: два
+  интерактивных HTML в `_attachments/` плюс markdown-страницу со статистикой,
+  Louvain-диагностикой и обоими iframe-embed в `wiki/meta/kn-maps/`.
   Триггеры: /kn-map, kn-map, knowledge map, "карта знаний", "сделай карту знаний",
   "обнови карту", "визуализируй wiki", "knowledge map snapshot", "umap wiki".
 ---
 
-# kn-map: визуализация wiki через UMAP
+# kn-map: визуализация wiki
 
-Скилл — тонкая обёртка над `bin/knowledge_map.py`. Сам Python-скрипт делает всю работу: читает `wiki/meta/embeddings.json`, проецирует 4096-мерные эмбеддинги в 2D через UMAP, рисует Plotly-фигуру, считает статистику, рендерит markdown-обёртку.
+Скилл — тонкая обёртка над `bin/knowledge_map.py`. Сам Python-скрипт делает всю работу:
+читает `wiki/meta/embeddings.json`, проецирует 4096-мерные эмбеддинги в 2D через UMAP,
+рендерит обе карты через Cytoscape.js (`bin/wiki_graph.py`), считает Louvain
+сообщества + bridge nodes + sparse-метрики, собирает markdown-обёртку.
+
+Два HTML — **не дубликат**, а разные ракурсы на одном движке:
+
+- `knowledge-map-*.html` (Cytoscape, layout=preset, координаты — UMAP):
+  близость на экране = **семантическая** близость (по эмбеддингам). Compound-облака
+  отключены — Louvain-кластеры на семантической карте искажают чтение.
+- `wiki-graph-*.html` (Cytoscape, layout=fcose): близость на экране = **топологическая**
+  связность (плотность wikilinks). Сообщества Louvain — compound nodes (полупрозрачные
+  облака), узлы-мосты — звезда с золотым свечением.
+
+В обеих картах: hover на узле подсвечивает его 1-hop соседей и затемняет остальное.
+
+Расхождения между двумя картами и есть самое интересное (страница семантически близка
+к одному кластеру, но цитируется в другом — кандидат для cross-link или re-domain).
 
 Скилл нужен только для: (1) маршрутизации запроса к скрипту, (2) подачи результата пользователю.
 
@@ -23,9 +42,10 @@ description: >
 
 | Команда | Поведение |
 |---|---|
-| `/kn-map` | Полная карта: HTML + markdown-обёртка с iframe и статистикой. Дефолтный `--seed 42`. |
-| `/kn-map --no-edges` | Без wikilink-граней (если граф визуально перегружен). |
-| `/kn-map --no-page` | Только HTML-артефакт, без markdown в `wiki/meta/kn-maps/`. Для одноразовой проверки. |
+| `/kn-map` | Полная генерация: оба HTML + markdown-обёртка. Дефолтный `--seed 42`. |
+| `/kn-map --no-edges` | Без wikilink-граней на UMAP-карте (если перегружено). Cytoscape-граф не затрагивается. |
+| `/kn-map --no-graph` | Пропустить Cytoscape-граф (только UMAP + markdown). |
+| `/kn-map --no-page` | Только HTML-артефакты, без markdown в `wiki/meta/kn-maps/`. Для одноразовой проверки. |
 | `/kn-map --seed N` | Другой UMAP random_state — даёт другую укладку точек (используй, если дефолтная плохо разделяет кластеры). |
 
 Под капотом — `python3 bin/knowledge_map.py [флаги]`. Плюс `--out-dir <DIR>` если нужен другой каталог для HTML (по умолчанию `_attachments/`).
@@ -51,13 +71,15 @@ description: >
 ```
 🗺️ Карта обновлена.
 
-- HTML: [[_attachments/knowledge-map-YYYY-MM-DD.html]] (Plotly viz, открой в браузере)
-- Markdown-обёртка: [[wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD]] (iframe + статистика, рендерится Obsidian'ом в reading mode)
+- UMAP (семантика): [[_attachments/knowledge-map-YYYY-MM-DD.html]]
+- Граф (топология): [[_attachments/wiki-graph-YYYY-MM-DD.html]]
+- Markdown-обёртка с обоими iframe + статистикой и Louvain-диагностикой:
+  [[wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD]]
 
-Сводка: <страниц всего>, <доменов>, <wikilink-граней>, <сирот>.
+Сводка: <страниц всего>, <доменов>, <wikilink-граней>, <сирот>, <Q сообществ>.
 ```
 
-Если в stdout есть строки с warnings (например, страницы без эмбеддинга, fallback на серый цвет) — упомяни их.
+Если генерация графа была пропущена (`--no-graph` или Cytoscape-зависимости отсутствуют), не упоминай его в выводе. Если в stdout есть строки с warnings (например, страницы без эмбеддинга, fallback на серый цвет) — упомяни их.
 
 ---
 
