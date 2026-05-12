@@ -104,7 +104,7 @@ Vault разделён на четыре слоя по жизненному ци
 | Скрипт | Запись | Назначение |
 |---|---|---|
 | `bin/embed.py` | `wiki/meta/embeddings.json` | Обновляет эмбеддинги для approx-lint. **Запускается Stop-hook'ом** в `.claude/settings.json` после каждого turn'а — скиллы про это не знают и не вызывают вручную. Hash-skip пропускает неизменённые страницы. |
-| `bin/static_lint.py` | `wiki/meta/lint-reports/lint-state.json` | Программные проверки (13 типов issues) + опц. `--approx` для embedding-based. |
+| `bin/static_lint.py` | `wiki/meta/lint-reports/lint-state.json` | Программные проверки (13 типов Layer 1) + always-on embedding-based (Layer 1.5: `similar-but-unlinked`, `synthesis-drift`, `contradiction_candidates`) если `wiki/meta/embeddings.json` доступен. Режимы: `--quick` (default, scope = touched pages), `--full` (полный audit). |
 | `bin/knowledge_map.py` | `wiki/meta/kn-maps/knowledge-map-*.md` | Снимок графа знаний. |
 | `bin/transcribe.py` | `raw/<имя>.md` | Конвертация бинарных источников. |
 | `bin/gen_dashboards.py` | `wiki/meta/dashboards/*.base` (только если файла нет) | Генерирует дефолтные дашборды для каждого `wiki/domains/*.md` и глобальный `dashboard.base`. **Запускается Stop-hook'ом** (async, ~100ms). Существующие `.base` не перезаписывает — ручные правки выживают. |
@@ -141,7 +141,7 @@ raw/source.md
    │  Phase 7: domain proposal (если порог N=10 пройден)
    │  Phase 8: lint review (опц.)
    ▼
-   bin/static_lint.py [--approx] → lint-state.json
+   bin/static_lint.py [--full] → lint-state.json
    ingest применяет open_issues (auto-fix / ask / skip)
    │
    │  на завершении turn'а Claude — Stop hook:

@@ -12,10 +12,20 @@ This script is the "first layer" of two-layer lint:
    adds its own `open_issues` entries.
 
 Usage:
-    python3 bin/static_lint.py            # run, write lint-state.json
-    python3 bin/static_lint.py --force    # bypass aggregate-hash skip-check
+    python3 bin/static_lint.py            # --quick (default): skip-check on
+                                            wiki_hash; new issues only for
+                                            pages whose content hash changed
+                                            since last lint; old issues for
+                                            non-touched pages preserved
+    python3 bin/static_lint.py --full     # full audit: ignore skip-check;
+                                            re-emit all issues; always run
+                                            on all pages
     python3 bin/static_lint.py --json     # also print full open_issues JSON
     python3 bin/static_lint.py --check <type>   # run only one check (debug)
+
+Embedding-based checks (similar-but-unlinked, synthesis-drift,
+contradiction_candidates) run in both modes when wiki/meta/embeddings.json
+is available. If absent — warning + skip those checks only.
 
 Exit codes:
     0 — clean (no issues, or skipped)
@@ -275,6 +285,36 @@ def compute_wiki_hash(pages: list[Page]) -> str:
         h.update(p.text.encode("utf-8"))
         h.update(b"\n")
     return h.hexdigest()
+
+
+def compute_page_hashes(pages: list[Page]) -> dict[str, str]:
+    """Per-page sha256 over full content (frontmatter + body). Used in --quick
+    mode to detect which pages changed since last lint run.
+    """
+    return {
+        p.relpath(): hashlib.sha256(p.text.encode("utf-8")).hexdigest()
+        for p in pages
+    }
+
+
+def compute_touched_pages(
+    current_hashes: dict[str, str],
+    stored_hashes: dict[str, str],
+) -> set[str]:
+    """Pages whose content hash changed since last lint, plus newly created
+    pages (in current but not in stored). Used to scope --quick mode.
+
+    Bootstrap (stored_hashes empty) returns ALL current pages — first run
+    treats everything as touched, equivalent to a full audit.
+    """
+    if not stored_hashes:
+        return set(current_hashes.keys())
+    touched: set[str] = set()
+    for path, current in current_hashes.items():
+        stored = stored_hashes.get(path)
+        if stored is None or stored != current:
+            touched.add(path)
+    return touched
 
 
 def load_lint_state() -> dict[str, Any]:
@@ -1185,6 +1225,25 @@ FIX_HANDLERS: dict[str, Any] = {
 }
 
 
+def issue_involves_pages(issue: Issue, page_set: set[str]) -> bool:
+    """True if issue references at least one page in `page_set`. Used to
+    filter --quick scope: keep only issues touching changed pages.
+
+    Issue payload conventions: `where`/`page_a`/`page_b`/`mentioned_in`
+    are the page-pointer fields across all checks.
+    """
+    payload = issue.payload
+    candidates: list[str] = []
+    for key in ("where", "page_a", "page_b"):
+        v = payload.get(key)
+        if isinstance(v, str):
+            candidates.append(v)
+    mentioned = payload.get("mentioned_in")
+    if isinstance(mentioned, list):
+        candidates.extend(p for p in mentioned if isinstance(p, str))
+    return any(p in page_set for p in candidates)
+
+
 def apply_auto_fixes(issues: list[Issue]) -> tuple[list[Issue], int]:
     """Try to apply auto-fix for each issue. Return (remaining, fixed_count).
 
@@ -1546,15 +1605,15 @@ def _make_approx_checks(
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--force", action="store_true", help="bypass aggregate-hash skip-check")
-    ap.add_argument("--json", action="store_true", help="print full open_issues JSON to stdout")
-    ap.add_argument("--check", type=str, default=None, help="run only one check by type")
     ap.add_argument(
-        "--approx",
+        "--full",
         action="store_true",
-        help="enable embedding-based checks (similar-but-unlinked, synthesis-drift). "
-             "Requires bin/embed.py update to have been run.",
+        help="full audit: ignore skip-check and per-page touched scope. "
+             "Default mode is --quick: skip if wiki unchanged, scope new "
+             "issues to pages whose content hash changed since last lint.",
     )
+    ap.add_argument("--json", action="store_true", help="print full open_issues JSON to stdout")
+    ap.add_argument("--check", type=str, default=None, help="run only one check by type (debug)")
     ap.add_argument(
         "--similarity-percentile",
         type=float,
@@ -1582,62 +1641,83 @@ def main() -> int:
         return 0
 
     wiki_hash = compute_wiki_hash(pages)
+    current_page_hashes = compute_page_hashes(pages)
     state = load_lint_state()
+    stored_page_hashes = state.get("page_hashes", {})
 
-    # Skip-check
-    if not args.force:
+    touched: set[str] = compute_touched_pages(current_page_hashes, stored_page_hashes)
+
+    # Skip-check (only --quick mode). --full always re-audits.
+    if not args.full:
         if state.get("wiki_hash") == wiki_hash and not state.get("open_issues"):
             print(f"wiki unchanged since last audit ({state.get('last_audit')}). clean. skipping.")
             return 0
 
+    # Always-on embedding checks. If indexes unavailable — warning + skip.
     extra_checks: list[tuple[str, Any]] = []
     contradiction_candidates: list[dict[str, Any]] = []
-    if args.approx:
-        try:
-            indexes = _load_embedding_indexes()
-        except ImportError as e:
-            print(f"warning: --approx unavailable ({e})", file=sys.stderr)
-            indexes = None
-        if indexes is not None:
-            wiki_idx, raw_idx = indexes
-            extra_checks = _make_approx_checks(
-                wiki_idx, raw_idx,
-                args.similarity_percentile, args.drift_std,
-            )
-            contradiction_candidates = compute_contradiction_candidates(
-                pages, wiki_idx,
-                threshold_percentile=args.candidate_percentile,
-            )
+    try:
+        indexes = _load_embedding_indexes()
+    except ImportError as e:
+        print(f"warning: embedding checks unavailable ({e})", file=sys.stderr)
+        indexes = None
+    if indexes is not None:
+        wiki_idx, raw_idx = indexes
+        extra_checks = _make_approx_checks(
+            wiki_idx, raw_idx,
+            args.similarity_percentile, args.drift_std,
+        )
+        contradiction_candidates = compute_contradiction_candidates(
+            pages, wiki_idx,
+            threshold_percentile=args.candidate_percentile,
+        )
 
     issues = run_all_checks(pages, filter_type=args.check, extra_checks=extra_checks)
 
     # Apply script auto-fixes inline. Anything not script-fixable (agent fix
-    # or ask-issue) stays in `remaining` and is written to lint-state.json.
+    # or ask-issue) stays in `remaining`.
     remaining, fixed = apply_auto_fixes(issues)
 
     if fixed:
         # Re-discover and re-hash because file contents changed
         pages = discover_pages()
         wiki_hash = compute_wiki_hash(pages)
+        current_page_hashes = compute_page_hashes(pages)
+
+    # Scope filtering: in --quick, keep new issues only for touched pages,
+    # preserve old issues for non-touched pages (--full will re-validate).
+    if args.full:
+        merged = remaining
+    else:
+        old_issues_to_keep = []
+        for raw in state.get("open_issues", []):
+            old_issue = Issue(raw["type"], {k: v for k, v in raw.items() if k != "type"})
+            if not issue_involves_pages(old_issue, touched):
+                old_issues_to_keep.append(old_issue)
+        new_issues_in_scope = [i for i in remaining if issue_involves_pages(i, touched)]
+        merged = old_issues_to_keep + new_issues_in_scope
 
     new_state: dict[str, Any] = {
         "wiki_hash": wiki_hash,
         "last_audit": dt.datetime.now().isoformat(timespec="seconds"),
         "files_checked": len(pages),
-        "open_issues": [iss.to_dict() for iss in remaining],
+        "page_hashes": current_page_hashes,
+        "open_issues": [iss.to_dict() for iss in merged],
     }
     if contradiction_candidates:
         new_state["contradiction_candidates"] = contradiction_candidates
     save_lint_state(new_state)
 
+    mode = "full" if args.full else "quick"
     print(
-        f"checked {len(pages)} pages, fixed {fixed}, "
-        f"{len(remaining)} remaining"
+        f"checked {len(pages)} pages [{mode}], "
+        f"touched {len(touched)}, fixed {fixed}, "
+        f"{len(merged)} remaining"
     )
     if args.json:
         print(json.dumps(new_state, ensure_ascii=False, indent=2))
 
-    return 1 if remaining else 0
+    return 1 if merged else 0
 
 
 if __name__ == "__main__":
