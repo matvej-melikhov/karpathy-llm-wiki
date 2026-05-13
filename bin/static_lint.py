@@ -72,10 +72,14 @@ FOLDER_TO_TYPE = {
     "entities": "entity",
     "questions": "question",
     "domains": "domain",
+    "minds": "mind",
 }
 CONTENT_FOLDERS = list(FOLDER_TO_TYPE.keys())
 
-VALID_STATUSES = {"evaluation", "in-progress", "ready"}
+DEFAULT_VALID_STATUSES = {"evaluation", "in-progress", "ready"}
+MIND_VALID_STATUSES = {"draft", "stable", "deprecated"}
+# Backward-compat alias for the original constant name.
+VALID_STATUSES = DEFAULT_VALID_STATUSES
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -359,11 +363,13 @@ class Issue:
 
 
 def check_status_not_in_enum(pages: list[Page]) -> Iterable[Issue]:
-    """status: must be one of evaluation/in-progress/ready (when present).
+    """status: must match the enum for the page's type.
 
-    Entity pages are skipped — `status` doesn't belong there at all per
-    template, and `check_invalid_fields` will flag it as an extra field
-    (correct fix: remove, not change-to-valid-value).
+    - mind: draft / stable / deprecated (default fix: draft)
+    - other content types: evaluation / in-progress / ready (default fix: in-progress)
+    - entity: skipped — `status` doesn't belong there at all per template,
+      and `check_invalid_fields` will flag it as an extra field
+      (correct fix: remove, not change-to-valid-value).
     """
     for p in pages:
         if p.fm is None:
@@ -373,11 +379,17 @@ def check_status_not_in_enum(pages: list[Page]) -> Iterable[Issue]:
         status = p.fm.fields.get("status")
         if status is None:
             continue
-        if status not in VALID_STATUSES:
+        if p.page_type == "mind":
+            valid = MIND_VALID_STATUSES
+            default_fix = "draft"
+        else:
+            valid = DEFAULT_VALID_STATUSES
+            default_fix = "in-progress"
+        if status not in valid:
             yield Issue("status-not-in-enum", {
                 "where": p.relpath(),
                 "value": status,
-                "fix": "in-progress",
+                "fix": default_fix,
             })
 
 
@@ -722,15 +734,20 @@ def check_dead_link(pages: list[Page]) -> Iterable[Issue]:
 
 
 def check_orphan(pages: list[Page]) -> Iterable[Issue]:
-    """Page with zero inbound wikilinks. Excludes meta pages (they're
-    infrastructure, not part of the knowledge graph) and the wiki root files
-    (index/log/cache/summary)."""
+    """Page with zero inbound wikilinks. Excludes:
+    - meta pages (infrastructure, not part of the knowledge graph)
+    - wiki root files (index/log/cache/summary)
+    - pages with status: deprecated (intentionally retired, replaced by a
+      newer revision; not expected to be linked)
+    """
     _, inbound = _build_link_graph(pages)
     for p in pages:
         if p.page_type == "meta":
             continue
         # also skip wiki root files even if they're not type:meta
         if p.folder == "":
+            continue
+        if p.fm is not None and p.fm.fields.get("status") == "deprecated":
             continue
         if not inbound.get(p.name):
             yield Issue("orphan", {"where": p.relpath()})
@@ -1427,6 +1444,9 @@ def check_synthesis_drift(
 
     for p in pages:
         if p.fm is None:
+            continue
+        # mind pages are author reflections, not source syntheses — drift is meaningless
+        if p.page_type == "mind":
             continue
         sources = p.fm.fields.get("sources")
         if not isinstance(sources, list) or not sources:
