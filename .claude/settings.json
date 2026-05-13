@@ -6,6 +6,7 @@
       "Edit(/.claude/skills/query/**)",
       "Edit(/.claude/skills/lint/**)",
       "Edit(/.claude/skills/save/**)",
+      "Edit(/.claude/skills/brainstorm/**)",
       "Edit(/.claude/skills/defuddle/**)",
       "Edit(/.claude/skills/obsidian-bases/**)",
       "Edit(/.claude/skills/obsidian-markdown/**)",

@@ -1,7 +1,7 @@
 ---
 type: meta
 title: "Архитектура llm-wiki"
-updated: 2026-05-01
+updated: 2026-05-02
 related:
   - "[[index]]"
   - "[[summary]]"
@@ -25,6 +25,7 @@ Vault разделён на четыре слоя по жизненному ци
 |---|---|---|---|
 | `raw/` | Источники: `.md`, `.pdf`, `.docx`, видео-транскрипты, URL-снимки. Один файл = один источник. | пользователь, `transcribe` (только конвертация бинарников из `raw/formats/`) | `ingest`, `transcribe` |
 | `raw/formats/` | Бинарные оригиналы (видео `.mkv`, аудио, картинки), которые требуют конвертации в `raw/*.md` перед ingest. | пользователь | `transcribe` |
+| `raw/brainstorm/` | Транскрипты brainstorm-сессий — диалог пользователь↔Claude, выступающий источником для синтезированных mind-страниц. Один файл = одна сессия. | `brainstorm` | `bin/embed.py`, `lint` |
 | `raw/meta/embeddings.json` | Эмбеддинги сырых источников (для dedup и approx-lint). | `bin/embed.py` | `ingest`, `lint` |
 | `raw/meta/ingested.json` | Манифест dedup: какие источники уже обработаны (хеши, source_url, целевые wiki-страницы). | `ingest` | `ingest`, `transcribe` |
 | `_attachments/` | Картинки и PDF, на которые ссылаются wiki-страницы через `![[...]]`. | `ingest` (при ingest изображений), пользователь | Obsidian, читатели |
@@ -39,6 +40,7 @@ Vault разделён на четыре слоя по жизненному ци
 | `wiki/entities/` | Люди, организации, статьи, библиотеки, модели ([[InstructGPT]], [[CatBoost]], [[Andrej Karpathy]], ...). | additive + правка |
 | `wiki/domains/` | Навигационные хабы для области (MOC — map of content). Создаются при пороге N=10 тегов области. | редко |
 | `wiki/questions/` | Сохранённые ответы и синтезы из `/save` и `/query`. | additive |
+| `wiki/minds/` | Авторские размышления пользователя (permanent notes по Луману). Рождаются в `/brainstorm`-сессиях из реплик пользователя. Свободная форма, без обязательных секций. | additive + правка |
 
 Каждая страница имеет frontmatter (`type`, `title`, `tags`, `domain`, `sources`, `related`, `status`) и связана wikilinks. Точное определение фронтматтера и шаблоны — в `_templates/`.
 
@@ -92,6 +94,7 @@ Vault разделён на четыре слоя по жизненному ци
 |---|---|---|
 | `ingest` | `wiki/{ideas,entities,domains}/` (включая `summary:` во frontmatter), `wiki/{cache,log,summary}.md`, `_attachments/` | `raw/`, lint-state, `questions/`, **`wiki/index.md` (генерируется скриптом)** |
 | `save` | `wiki/questions/` (включая `summary:`), `wiki/{cache,log}.md` | `ideas/`, `entities/` (это область ingest), lint-state, **`wiki/index.md`** |
+| `brainstorm` | `wiki/minds/` (включая `summary:`), `raw/brainstorm/<date>-<slug>.md`, `wiki/{cache,log}.md` | `wiki/{ideas,entities,domains,questions}/`, `raw/` вне `raw/brainstorm/`, lint-state, **`wiki/index.md`** |
 | `query` | (опц.) `wiki/questions/` через делегирование на save, обновляет `cache.md` после значимых ответов | content-страницы напрямую |
 | `lint` | `wiki/meta/lint-reports/lint-state.json` (+ опц. отчёт), а также **content-файлы для script auto-fixes** (через `bin/static_lint.py`) | агентские правки (`missing-summary`) и ask-issues — не делает сам |
 | `wiki` | Роутер. Сам ничего не пишет, делегирует. | – |
@@ -182,7 +185,7 @@ raw/source.md
 
 ## 6. Ключевые инварианты
 
-1. **Существующие файлы в `raw/` не редактируются** Claude'ом. Создание новых файлов допустимо только через `transcribe` при конвертации бинарников из `raw/formats/`. Удаление и переименование источников — только пользователь.
+1. **Существующие файлы в `raw/` не редактируются** Claude'ом. Создание новых файлов допустимо в двух случаях: (a) `transcribe` при конвертации бинарников из `raw/formats/` в `raw/*.md`; (b) `brainstorm` при записи транскрипта сессии в `raw/brainstorm/<date>-<slug>.md`. Удаление и переименование источников — только пользователь.
 2. **`cache.md` — overwrite.** Не append. Старая история — в `log.md`.
 3. **`log.md` — append-only.** Новые записи сверху, старое не правится.
 4. **Lint правит content только в auto-fix категории.** `bin/static_lint.py` применяет script auto-fixes inline (status/tag/wikilink нормализация, schema-violations и т.д.). Agent-fix issues (`missing-summary`) и ask-issues остаются в `lint-state.json::open_issues` для последующей обработки lint-скиллом или пользователем. Никогда не правит content по ask-issues самостоятельно — только после явного решения.
@@ -242,7 +245,7 @@ raw/source.md
 
 ## 10. Эволюция
 
-Документ описывает текущее состояние (2026-05-01). Изменения архитектуры:
+Документ описывает текущее состояние (2026-05-02). Изменения архитектуры:
 
 - При добавлении нового слоя/папки — обновить разделы 1, 2, 3, синхронизировать с `CLAUDE.md`.
 - При изменении семантики записи существующего файла — обновить раздел 2 и владеющий скилл.
