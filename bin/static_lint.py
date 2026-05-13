@@ -788,6 +788,12 @@ def check_asymmetric_related(pages: list[Page]) -> Iterable[Issue]:
                 continue
             seen.add(key)
             page_a, page_b = by_name[a], by_name[b]
+            # mind pages are subjective author notes — they may reference
+            # ideas/entities/etc. without requiring a symmetric backlink in
+            # the encyclopedia entry. Obsidian's backlinks pane already
+            # surfaces the inverse direction at the UI level.
+            if page_a.page_type == "mind" or page_b.page_type == "mind":
+                continue
             yield Issue("asymmetric-related", {
                 "page_a": page_a.relpath(),
                 "page_b": page_b.relpath(),
