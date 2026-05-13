@@ -48,6 +48,7 @@ filters:
         - file.inFolder("wiki/entities")
         - file.inFolder("wiki/questions")
         - file.inFolder("wiki/domains")
+        - file.inFolder("wiki/minds")
 formulas:
   age_days: (now() - file.mtime).days.round(0)
 properties:
@@ -118,6 +119,16 @@ views:
         - file.inFolder("wiki/domains")
     order:
       - file.name
+      - updated
+  - type: list
+    name: Minds
+    filters:
+      and:
+        - file.inFolder("wiki/minds")
+    order:
+      - file.name
+      - status
+      - seed
       - updated
   - type: list
     name: Needs Development

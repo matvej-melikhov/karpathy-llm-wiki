@@ -22,6 +22,7 @@ SECTIONS = [
     ("Entities", "entities"),
     ("Domains", "domains"),
     ("Questions", "questions"),
+    ("Minds", "minds"),
 ]
 
 HEADER = """\
@@ -43,6 +44,7 @@ Stop-hook'е.
 - `ideas/` — синтезированные концепции, механизмы, теории
 - `entities/` — синтезированные сущности (люди, организации, продукты, статьи, модели)
 - `questions/` — синтезы на основе вопросов пользователя
+- `minds/` — авторские размышления, рождённые в /brainstorm-сессиях
 - `domains/` — навигационные хабы (MOC)
 - `meta/` — инфраструктура (dashboard, lint-отчёты)
 

@@ -753,6 +753,7 @@ def render_artifact_page(
     _TYPE_LABEL = {
         "idea": "идеи", "entity": "сущности",
         "question": "вопросы", "domain": "домены",
+        "mind": "мысли",
     }
 
     # Default fallback if caller doesn't provide an explicit URL
