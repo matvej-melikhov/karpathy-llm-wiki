@@ -167,10 +167,10 @@ Claude собирает draft-mind:
    seed: "..."
    seed_strategy: explicit
    created: <ISO datetime>
-   synthesis:
-     minds_created: ["[[Имя mind]]"]
-     pages_updated: []
-     dropped_branches: <int — сколько cross-link кандидатов отброшено>
+   minds_created:
+     - "[[Имя mind]]"
+   pages_updated: []
+   dropped_branches: <int — сколько cross-link кандидатов отброшено>
    ---
 
    # Brainstorm: <seed> (YYYY-MM-DD)
@@ -231,7 +231,7 @@ Claude собирает draft-mind:
 5. Frontmatter: bump `updated`, добавить новый source в `sources` (`[[raw/brainstorm/<new-date>-<slug>]]`), расширить `related` подтверждёнными новыми связями.
 6. Commit:
    - `Edit wiki/minds/<title>.md` (не Write — точечная правка).
-   - `Write raw/brainstorm/<new-date>-<slug>.md`. В `synthesis` использовать `pages_updated: ["[[Имя]]"]` вместо `minds_created`.
+   - `Write raw/brainstorm/<new-date>-<slug>.md`. В frontmatter использовать `pages_updated: ["[[Имя]]"]`, `minds_created: []`.
    - log/cache — как в обычном flow.
 
 ### New revision (новая mind с supersedes)
@@ -252,7 +252,7 @@ Claude собирает draft-mind:
 5. Commit:
    - `Write wiki/minds/<title> 2.md` (новая).
    - `Edit wiki/minds/<base>.md` (старая, статус + callout).
-   - `Write raw/brainstorm/<new-date>-<slug>.md`. В `synthesis`: `minds_created`.
+   - `Write raw/brainstorm/<new-date>-<slug>.md`. В frontmatter: `minds_created: ["[[Имя новой]]"]`, `pages_updated: []`.
    - log/cache.
 
 ---
@@ -262,7 +262,7 @@ Claude собирает draft-mind:
 Если пользователь явной командой («хватит», «всё», «стоп», «закончили») прерывает сессию **до набора 2 тезисов** или вообще без тезисов:
 
 1. Сессия записывается **только** в `raw/brainstorm/<date>-<slug>.md` (для аналитики потерь и возможного будущего возвращения к теме).
-2. Frontmatter сессии: `synthesis: { minds_created: [], pages_updated: [], dropped_branches: 0 }`.
+2. Frontmatter сессии: `minds_created: []`, `pages_updated: []`, `dropped_branches: 0` (плоские поля, не nested).
 3. **mind не создаётся.**
 4. log: запись «brainstorm: <seed> — прерван без mind».
 5. cache: только обновление `## Последнее обновление` (без новой mind в фактах).

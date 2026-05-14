@@ -61,6 +61,57 @@ RAW_ROOT = Path("raw")
 WIKI_EMBED_PATH = WIKI_ROOT / "meta" / "embeddings.json"
 RAW_EMBED_PATH = RAW_ROOT / "meta" / "embeddings.json"
 
+
+def _load_dotenv() -> None:
+    """Merge project-root .env into os.environ. No-op if file is missing.
+
+    Why we have a hand-rolled parser instead of python-dotenv: keeps embed.py
+    dep-free (matches the rest of bin/, which only uses stdlib + pytest).
+    Why this matters: skills call `python3 bin/embed.py …` directly through
+    the Bash tool, which spawns a subprocess that does not inherit shell
+    `.env` loading. Without this function, EMBED_API_KEY etc. are not
+    visible to the subprocess and OpenAI-compatible providers fail with 401.
+
+    Walks up from this file to find .env at the project root. Existing env
+    vars win over .env (matches dotenv default, lets the caller override).
+    Supports `KEY=value`, optional `export ` prefix, optional quoted values,
+    `#` comments, and blank lines. No interpolation, no multiline values.
+    """
+    here = Path(__file__).resolve().parent
+    env_file = None
+    for parent in (here, *here.parents):
+        candidate = parent / ".env"
+        if candidate.is_file():
+            env_file = candidate
+            break
+    if env_file is None:
+        return
+
+    try:
+        text = env_file.read_text(encoding="utf-8")
+    except OSError:
+        return
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):].lstrip()
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+            value = value[1:-1]
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_dotenv()
+
+
 # Provider selection — "ollama" (native API) or "openai" (OpenAI-compatible:
 # LMStudio, llama.cpp server, vLLM, OpenAI itself).
 DEFAULT_PROVIDER = os.environ.get("EMBED_PROVIDER", "ollama")
