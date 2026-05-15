@@ -1,4 +1,4 @@
-# llm-wiki
+# LLM Wiki
 
 Obsidian-vault, управляемый через Claude Code. Реализует паттерн LLM Wiki — постоянная, накапливающаяся база знаний для Claude + Obsidian.
 
