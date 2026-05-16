@@ -70,6 +70,12 @@
             "command": "cd \"$PWD\"; [ -f bin/gen_index.py ] && python3 bin/gen_index.py >/dev/null 2>&1 || true",
             "async": true,
             "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "afplay /System/Library/Sounds/Glass.aiff >/dev/null 2>&1 || true",
+            "async": true,
+            "timeout": 10
           }
         ]
       }
