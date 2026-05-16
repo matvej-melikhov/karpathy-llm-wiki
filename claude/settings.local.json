@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git rm *)",
+      "Bash(git check-ignore *)",
+      "Bash(git -C /Users/melikhov.ma/Documents/diploma/llm-wiki add raw/RLHF.md)",
+      "Bash(git -C /Users/melikhov.ma/Documents/diploma/llm-wiki diff --cached --name-only)",
+      "Bash(git -C /Users/melikhov.ma/Documents/diploma/llm-wiki ls-files --others raw/)",
+      "Bash(git -C /Users/melikhov.ma/Documents/diploma/llm-wiki add raw/)",
+      "Bash(git -C /Users/melikhov.ma/Documents/diploma/llm-wiki status --short)",
+      "Bash(git -C /Users/melikhov.ma/Documents/diploma/llm-wiki ls-files --others --ignored --exclude-standard raw/)",
+      "Bash(git *)"
+    ]
+  }
+}

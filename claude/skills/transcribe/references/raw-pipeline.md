@@ -67,11 +67,11 @@ python3 bin/transcribe.py --pages raw/formats/paper.pdf
 
 ## Step 1б — Чтение контента (Read tool, нативный multimodal)
 
-Claude читает исходный PDF через **Read tool** — это критически важно:
+Агент читает исходный PDF через **Read tool** — это критически важно:
 
-- **Text PDF**: Claude видит точный текст, формулы (LaTeX), таблицы, структуру
-- **Scanned PDF**: Claude видит rendered изображение страницы — читает OCR-качественно
-- **Нет потерь формул** — в отличие от pymupdf4llm, Claude корректно распознаёт $\LaTeX$
+- **Text PDF**: агент видит точный текст, формулы (LaTeX), таблицы, структуру
+- **Scanned PDF**: агент видит rendered изображение страницы — читает OCR-качественно
+- **Нет потерь формул** — в отличие от pymupdf4llm, агент корректно распознаёт $\LaTeX$
 
 ```
 Read file_path="raw/formats/paper.pdf"

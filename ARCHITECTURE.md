@@ -17,8 +17,6 @@ Vault разделён на четыре слоя по жизненному ци
 | `raw/brainstorm/`          | Транскрипты brainstorm-сессий. Один файл = одна сессия.                                                                                        | `brainstorm`                                                                 | `bin/embed.py`, `lint` |
 | `_attachments/`            | Картинки и PDF, на которые ссылаются wiki-страницы через `![[...]]`.                                                                           | `ingest` (при ingest изображений), пользователь                              | Obsidian, пользователь |
 
-**Ограничение:** агент **не редактирует существующие файлы в `raw/`**. Создание новых файлов допустимо в двух случаях: (a) `transcribe` — конвертация бинарников из `raw/formats/`; (b) `brainstorm` — запись транскрипта сессии в `raw/brainstorm/<date>-<slug>.md`. Удаление — только пользователь. Переименование — через `bin/rename_wiki_page.py` (см. правило 10). `_attachments/` — additive: новые файлы добавляются, старые остаются.
-
 ### 1.2 Контент wiki (LLM synthesis)
 
 | Путь              | Содержимое                                                                                                         | Семантика         |
@@ -28,8 +26,6 @@ Vault разделён на четыре слоя по жизненному ци
 | `wiki/domains/`   | Навигационные хабы для области (MOC — map of content). Создаются при пороге N=10 тегов области.                    | additive + правка |
 | `wiki/questions/` | Сохранённые ответы и синтезы из `/save` и `/query`.                                                                | additive          |
 | `wiki/minds/`     | Авторские размышления (Mind Mapping). Рождаются в `/brainstorm`-сессиях. Свободная форма, без обязательных секций. | additive + правка |
-
-Каждая страница имеет frontmatter (`type`, `title`, `tags`, ...) и связана wikilinks. Точное определение фронтматтера и шаблоны страниц — в `_templates/`.
 
 ### 1.3 Навигация и состояние
 
@@ -42,15 +38,15 @@ Vault разделён на четыре слоя по жизненному ци
 
 ### 1.4 Метаданные (auto-generated)
 
-| Путь                                                   | Что хранит                                                                                                                                             | Кто генерирует                                                                  |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| `raw/meta/embeddings.json`                             | Эмбеддинги сырых источников.                                                                                                                           | `bin/embed.py`                                                                  |
-| `raw/meta/ingested.json`                               | Манифест dedup. Чтобы повторный ingest не запускал синтез заново.                                                                                      | `ingest`                                                                        |
-| `wiki/meta/embeddings.json`                            | Эмбеддинги wiki-страниц.                                                                                                                               | `bin/embed.py`                                                                  |
-| `wiki/meta/lint-reports/lint-state.json`               | Последнее состояние lint.                                                                                                                              | `bin/static_lint.py`                                                            |
-| `wiki/meta/lint-reports/lint-report-YYYY-MM-DD.md`     | Человеко-читаемый отчёт о результатах lint.                                                                                                            | `lint`                                                                          |
-| `wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD.md`        | Снимок графа знаний (плотность связей, кластеры).                                                                                                      | `bin/knowledge_map.py`                                                          |
-| `wiki/meta/dashboards/<Domain>.base`, `dashboard.base` | Obsidian Bases-файлы.                                                                                                                                  | `bin/gen_dashboards.py` (create-only); `obsidian-bases` (для нешаблонных Bases) |
+| Путь                                                   | Что хранит                                                        | Кто генерирует                                                                  |
+| ------------------------------------------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `raw/meta/embeddings.json`                             | Эмбеддинги сырых источников.                                      | `bin/embed.py`                                                                  |
+| `raw/meta/ingested.json`                               | Манифест dedup. Чтобы повторный ingest не запускал синтез заново. | `ingest`                                                                        |
+| `wiki/meta/embeddings.json`                            | Эмбеддинги wiki-страниц.                                          | `bin/embed.py`                                                                  |
+| `wiki/meta/lint-reports/lint-state.json`               | Последнее состояние lint.                                         | `bin/static_lint.py`                                                            |
+| `wiki/meta/lint-reports/lint-report-YYYY-MM-DD.md`     | Человеко-читаемый отчёт о результатах lint.                       | `lint`                                                                          |
+| `wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD.md`        | Снимок графа знаний (плотность связей, кластеры).                 | `bin/knowledge_map.py`                                                          |
+| `wiki/meta/dashboards/<Domain>.base`, `dashboard.base` | Obsidian Bases-файлы.                                             | `bin/gen_dashboards.py` (create-only); `obsidian-bases` (для нешаблонных Bases) |
 
 **Семантика:** все эти артефакты **derivable** — могут быть пересчитаны из контента. Их безопасно удалять.
 
@@ -67,12 +63,11 @@ Vault разделён на четыре слоя по жизненному ци
 | `brainstorm`     | `wiki/minds/`, `raw/brainstorm/<date>-<slug>.md`, `wiki/{cache,log}.md`                             |
 | `query`          | `wiki/questions/` (опц.)  через делегирование на save, обновляет `cache.md` после значимых ответов  |
 | `lint`           | `wiki/meta/lint-reports/lint-state.json` (+ опц. отчёт), content-файлы                              |
-| `wiki`           | Роутер — делегирует другим скиллам.                                                                 |
 | `transcribe`     | `raw/<имя>.md` (транскрибация из `raw/formats/...`)                                                 |
 | `obsidian-bases` | `wiki/meta/dashboards/*.base` (только нешаблонные / разовые правки)                                 |
 | `defuddle`       | возвращает markdown в stdout — фактическую запись в `raw/` делает пользователь или вызывающий скилл |
 
-## Скрипты `bin/`
+## 3. Скрипты `bin/`
 
 | Скрипт                               | Запись                                                  | Назначение                                                                        |
 | ------------------------------------ | ------------------------------------------------------- | --------------------------------------------------------------------------------- |
@@ -82,25 +77,10 @@ Vault разделён на четыре слоя по жизненному ци
 | `bin/transcribe.py`                  | `raw/<имя>.md`                                          | Конвертация бинарных источников.                                                  |
 | `bin/gen_dashboards.py`              | `wiki/meta/dashboards/*.base` (только если файла нет)   | Дефолтные дашборды по `wiki/domains/*.md` + глобальный `dashboard.base`.          |
 | `bin/gen_index.py`                   | `wiki/index.md` (полная перезапись)                     | Сборка `index.md` по `summary` во frontmatter страниц.                            |
-| `bin/rename_wiki_page.py`            | wiki-/raw-страница (rename/move) + все wikilinks на неё | Rename/move страницы с обновлением всех wikilinks. Используется по инварианту 10. |
+| `bin/rename_wiki_page.py`            | wiki-/raw-страница (rename/move) + все wikilinks на неё | Rename/move страницы с обновлением всех wikilinks.                                |
 | `bin/setup-vault.sh`, `bin/setup.sh` | initial scaffold                                        | Настройка vault и необходимого окружения. Однократно при создании инициализации.  |
 
 `embed.py`, `gen_index.py`, `gen_dashboards.py` запускаются автоматически Stop-hook'ом после каждого turn'а — скиллы их не вызывают.
-
----
-
-## 3. Правила и ограничения
-
-1. **Существующие файлы в `raw/` не редактируются** агентом. Создание новых файлов допустимо в двух случаях: (a) `transcribe` при конвертации бинарников из `raw/formats/` в `raw/*.md`; (b) `brainstorm` при записи транскрипта сессии в `raw/brainstorm/<date>-<slug>.md`. Удаление — только пользователь. Переименование — через `bin/rename_wiki_page.py` (см. правило 10).
-2. **`cache.md` — overwrite-only.** Не append.
-3. **`log.md` — append-only.** Новые записи сверху, старое не правится.
-4. **Lint правит content по двум каналам.** Script auto-fixes — inline без подтверждения. Agent-fix и ask-issues — только после явного подтверждения пользователем.
-5. **Один концепт = одна страница.**
-6. **Каждая страница имеет источник.** Frontmatter `sources:` с путём в `raw/...`. Страница без источника — баг.
-7. **Wikilinks — единственный способ связи.** Никаких сырых путей к страницам в теле текста.
-8. **Domain создаётся по порогу.** Тег с N≥10 страницами → предложение создать `domains/<name>.md`. Меньше — просто тег.
-9. **Provenance в `log.md`.** Каждый ingest/save оставляет запись в `log.md` с указанием источника, созданных и обновлённых страниц.
-10. **Rename/move — только через `bin/rename_wiki_page.py`.** Прямой `mv` или `Write` на новый путь ломают wikilinks. Распространяется на wiki-страницы и raw-источники.
 
 ---
 
@@ -113,4 +93,4 @@ Vault разделён на четыре слоя по жизненному ци
 3. `wiki/index.md` — ~1000-5000 токенов, полный каталог.
 4. Конкретные `wiki/ideas/<страница>.md` или `wiki/entities/<страница>.md` — 100-300 токенов каждая.
 
-Подробная инструкция для встраивания — в `CLAUDE.md` корня проекта.
+Подробная инструкция для встраивания — в `CLAUDE.md`.

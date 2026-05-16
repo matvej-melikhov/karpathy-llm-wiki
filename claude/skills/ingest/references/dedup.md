@@ -11,9 +11,9 @@
       "hash": "<sha256 содержимого>",
       "ingested_at": "2026-04-29T15:45:00",
       "pages_created": ["wiki/ideas/RLHF.md", "wiki/ideas/PPO.md"],
-      "pages_updated": ["wiki/index.md", "wiki/cache.md"]
+      "pages_updated": ["wiki/cache.md", "wiki/log.md", "wiki/summary.md"]
     },
-    "raw/articles/policy-gradient-2026-04-30.md": {
+    "raw/policy-gradient-2026-04-30.md": {
       "source_url": "https://lilianweng.github.io/posts/2018-04-08-policy-gradient/",
       "hash": "<sha256 тела без frontmatter>",
       "ingested_at": "2026-04-30T10:00:00",
