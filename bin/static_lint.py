@@ -481,6 +481,8 @@ def check_invalid_fields(pages: list[Page]) -> Iterable[Issue]:
         for missing in sorted(expected - actual):
             if missing == "summary":
                 continue  # has its own check (check_missing_summary)
+            if missing == "provenance":
+                continue  # optional marker; skills fill at creation, manual pages omit
             yield Issue("invalid-fields", {
                 "where": p.relpath(),
                 "subtype": "missing",
