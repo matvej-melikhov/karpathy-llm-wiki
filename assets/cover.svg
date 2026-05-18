@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" role="img" aria-label="llm-wiki — agent-managed knowledge base">
+  <defs>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#E5E2D9"/>
+    </pattern>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="3" stdDeviation="2" flood-color="#1F2937" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <!-- background -->
+  <rect width="1200" height="400" fill="#FBFAF7"/>
+  <rect width="1200" height="400" fill="url(#grid)"/>
+
+  <!-- top hairline -->
+  <rect x="0" y="0" width="1200" height="4" fill="#9370DB"/>
+
+  <!-- title block -->
+  <text x="80" y="158" font-family="Georgia, 'Times New Roman', serif" font-size="86" font-weight="700" fill="#1F2937">llm-wiki</text>
+  <text x="84" y="200" font-family="Georgia, 'Times New Roman', serif" font-size="22" font-style="italic" fill="#6B7280">a persistent, agent-managed knowledge base</text>
+
+  <!-- accent rule -->
+  <rect x="84" y="222" width="120" height="3" fill="#9370DB"/>
+
+  <!-- bullets -->
+  <g font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="17" fill="#374151">
+    <text x="84" y="265">— markdown vault, не RAG</text>
+    <text x="84" y="295">— wiki обогащается с каждым новым источником</text>
+    <text x="84" y="325">— Claude Code skills для ingest / query / brainstorm</text>
+  </g>
+
+  <!-- knowledge graph (right side) -->
+  <g transform="translate(770, 60)" filter="url(#softShadow)">
+    <!-- secondary edges (между satellite-узлами) -->
+    <g stroke="#D1D5DB" stroke-width="1" fill="none" stroke-dasharray="4 3">
+      <line x1="50" y1="40" x2="280" y2="40"/>
+      <line x1="60" y1="220" x2="170" y2="275"/>
+      <line x1="280" y1="225" x2="170" y2="275"/>
+    </g>
+    <!-- primary edges (от центра) -->
+    <g stroke="#9CA3AF" stroke-width="1.6" fill="none">
+      <line x1="160" y1="130" x2="50" y2="40"/>
+      <line x1="160" y1="130" x2="280" y2="40"/>
+      <line x1="160" y1="130" x2="60" y2="220"/>
+      <line x1="160" y1="130" x2="280" y2="225"/>
+      <line x1="160" y1="130" x2="170" y2="275"/>
+    </g>
+
+    <!-- center node -->
+    <circle cx="160" cy="130" r="34" fill="#9370DB" stroke="#1F2937" stroke-width="2"/>
+    <text x="160" y="135" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="14" font-weight="700" fill="white" text-anchor="middle">RLHF</text>
+
+    <!-- satellites -->
+    <g>
+      <circle cx="50" cy="40" r="20" fill="#FBFAF7" stroke="#1F2937" stroke-width="1.5"/>
+      <text x="50" y="78" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="11" fill="#1F2937" text-anchor="middle">Bradley-Terry</text>
+    </g>
+    <g>
+      <circle cx="280" cy="40" r="20" fill="#FBFAF7" stroke="#1F2937" stroke-width="1.5"/>
+      <text x="280" y="78" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="11" fill="#1F2937" text-anchor="middle">PPO</text>
+    </g>
+    <g>
+      <circle cx="60" cy="220" r="20" fill="#FBFAF7" stroke="#1F2937" stroke-width="1.5"/>
+      <text x="60" y="258" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="11" fill="#1F2937" text-anchor="middle">Reward Model</text>
+    </g>
+    <g>
+      <circle cx="280" cy="225" r="20" fill="#FBFAF7" stroke="#1F2937" stroke-width="1.5"/>
+      <text x="280" y="263" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="11" fill="#1F2937" text-anchor="middle">SFT</text>
+    </g>
+    <g>
+      <circle cx="170" cy="275" r="20" fill="#FBFAF7" stroke="#1F2937" stroke-width="1.5"/>
+      <text x="170" y="313" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="11" fill="#1F2937" text-anchor="middle">Reward Hacking</text>
+    </g>
+  </g>
+
+  <!-- bottom-right wordmark -->
+  <text x="1180" y="380" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="11" fill="#9CA3AF" text-anchor="end">obsidian · markdown · wikilinks</text>
+</svg>

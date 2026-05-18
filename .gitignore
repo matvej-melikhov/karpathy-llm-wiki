@@ -24,6 +24,15 @@
 # === Node (если появится тулинг) ===
 node_modules/
 
+# === Python ===
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# === ВКР рендеры (figures для диссертации) ===
+/renders/
+/renders-png/
+
 # === Per-user content: raw/ ===
 # Ignore everything inside raw/, but preserve .gitkeep scaffolding.
 /raw/*
