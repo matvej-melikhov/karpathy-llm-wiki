@@ -45,7 +45,7 @@ Vault разделён на четыре слоя по жизненному ци
 | `wiki/meta/embeddings.json`                            | Эмбеддинги wiki-страниц.                                          | `bin/embed.py`                                                                  |
 | `wiki/meta/lint-reports/lint-state.json`               | Последнее состояние lint.                                         | `bin/static_lint.py`                                                            |
 | `wiki/meta/lint-reports/lint-report-YYYY-MM-DD.md`     | Человеко-читаемый отчёт о результатах lint.                       | `lint`                                                                          |
-| `wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD.md`        | Снимок графа знаний (плотность связей, кластеры).                 | `bin/knowledge_map.py`                                                          |
+| `wiki/meta/snapshots/snapshot-YYYY-MM-DD.md`           | Слепок vault: метрики связности и семантики + две карты.          | `bin/knowledge_map.py`                                                          |
 | `wiki/meta/dashboards/<Domain>.base`, `dashboard.base` | Obsidian Bases-файлы.                                             | `bin/gen_dashboards.py` (create-only); `obsidian-bases` (для нешаблонных Bases) |
 
 **Семантика:** все эти артефакты **derivable** — могут быть пересчитаны из контента. Их безопасно удалять.
@@ -73,7 +73,7 @@ Vault разделён на четыре слоя по жизненному ци
 | ------------------------------------ | ------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `bin/embed.py`                       | `wiki/meta/embeddings.json`                             | Обновляет эмбеддинги страниц.                                                     |
 | `bin/static_lint.py`                 | `wiki/meta/lint-reports/lint-state.json`                | Статические проверки и embedding-based lint wiki-страниц.                         |
-| `bin/knowledge_map.py`               | `wiki/meta/kn-maps/knowledge-map-*.md`                  | Снимок графа знаний.                                                              |
+| `bin/knowledge_map.py`               | `wiki/meta/snapshots/snapshot-*.md`                     | Слепок vault: метрики + две карты (UMAP + force-graph).                           |
 | `bin/transcribe.py`                  | `raw/<имя>.md`                                          | Конвертация бинарных источников.                                                  |
 | `bin/gen_dashboards.py`              | `wiki/meta/dashboards/*.base` (только если файла нет)   | Дефолтные дашборды по `wiki/domains/*.md` + глобальный `dashboard.base`.          |
 | `bin/gen_index.py`                   | `wiki/index.md` (полная перезапись)                     | Сборка `index.md` по `summary` во frontmatter страниц.                            |

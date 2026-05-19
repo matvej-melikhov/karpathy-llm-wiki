@@ -241,14 +241,17 @@ def discover_pages() -> list[Page]:
         return pages
 
     for md in sorted(WIKI_ROOT.rglob("*.md")):
-        # Skip auto-generated meta artifacts. Supports both layouts:
-        # - subdir: wiki/meta/lint-reports/, wiki/meta/kn-maps/
-        # - legacy flat: wiki/meta/lint-report-*.md, knowledge-map-*.md
-        if md.parent.name in ("lint-reports", "kn-maps"):
+        # Skip auto-generated meta artifacts. Supports current + legacy:
+        # - current subdirs: wiki/meta/lint-reports/, wiki/meta/snapshots/
+        # - legacy subdir: wiki/meta/kn-maps/
+        # - flat legacy: wiki/meta/lint-report-*.md, knowledge-map-*.md,
+        #   snapshot-*.md
+        if md.parent.name in ("lint-reports", "snapshots", "kn-maps"):
             continue
         if md.parent.name == "meta" and (
             md.name.startswith("lint-report-")
             or md.name.startswith("knowledge-map-")
+            or md.name.startswith("snapshot-")
         ):
             continue
         # determine folder

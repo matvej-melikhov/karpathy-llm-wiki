@@ -2,7 +2,7 @@
 
 Obsidian-vault, управляемый агентом. Реализует паттерн LLM Wiki — постоянная, накапливающаяся база знаний.
 
-**Скиллы:** `/ingest`, `/query`, `/lint`, `/save`, `/brainstorm`, `/kn-map`, `/transcribe`, `/defuddle`, `/obsidian-bases`, `/obsidian-markdown`
+**Скиллы:** `/ingest`, `/query`, `/study`, `/lint`, `/save`, `/brainstorm`, `/edge`, `/snapshot`, `/transcribe`, `/defuddle`, `/obsidian-bases`, `/obsidian-markdown`, `/help`
 
 ## Структура wiki
 
@@ -23,7 +23,7 @@ Obsidian-vault, управляемый агентом. Реализует пат
 | `wiki/log.md`     | Журнал операций                                  | все скиллы                                                        | **append** (сверху) |
 | `wiki/cache.md`   | Горячий кэш ~500 слов (актуальный контекст)      | `ingest`, `save`, `query`, `brainstorm`                           | **overwrite**       |
 | `wiki/summary.md` | Обзор vault (счётчики, статус)                   | `ingest`                                                          | overwrite           |
-| `wiki/meta/*`     | Эмбеддинги, lint-state, knowledge-maps, дашборды | `bin/*`, `lint`, `gen_dashboards.py`                              | generated           |
+| `wiki/meta/*`     | Эмбеддинги, lint-state, snapshots, дашборды      | `bin/*`, `lint`, `gen_dashboards.py`                              | generated           |
 
 **Режимы:**
 - **read-only** — агент не пишет (источники, шаблоны, скрипты)

@@ -6,8 +6,9 @@ graph topology), but a fundamentally different view:
     knowledge_map.py:  UMAP layout — close on screen = semantically similar
     wiki_graph.py:     fcose layout — close on screen = densely connected
 
-The two artifacts are versioned alongside each other in _attachments/ and
-both embedded as iframes into wiki/meta/kn-maps/knowledge-map-*.md.
+The two artifacts are versioned alongside each other in _attachments/
+(snapshot-*.html and snapshot-graph-*.html) and both embedded as iframes
+into wiki/meta/snapshots/snapshot-*.md.
 
 Self-contained: vendored cytoscape.js + fcose extension are inlined into
 the output HTML so it works offline and inside Obsidian's iframe sandbox

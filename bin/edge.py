@@ -17,7 +17,7 @@ Filtering:
   domain pages are MOCs (high out-degree by construction) and would
   always dominate the frontier; meta pages are infrastructure.
 - Root meta files (index.md, log.md, cache.md, summary.md) excluded.
-- `wiki/meta/`, `lint-reports/`, `kn-maps/` paths excluded.
+- `wiki/meta/`, `lint-reports/`, `snapshots/` (and legacy `kn-maps/`) paths excluded.
 
 Read-only. Doesn't write any state files.
 
@@ -56,7 +56,7 @@ DEFAULT_TOP = 10
 
 EXCLUDE_TYPES = {"meta", "domain"}
 EXCLUDE_FILENAMES = {"index.md", "log.md", "cache.md", "summary.md"}
-EXCLUDE_PARENT_DIRS = {"meta", "lint-reports", "kn-maps"}
+EXCLUDE_PARENT_DIRS = {"meta", "lint-reports", "snapshots", "kn-maps"}
 
 EXIT_OK = 0
 EXIT_USAGE = 2

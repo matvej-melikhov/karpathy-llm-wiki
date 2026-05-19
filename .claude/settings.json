@@ -13,7 +13,7 @@
       "Bash(chmod +x bin/setup.sh)",
       "Bash(mkdir -p .claude/skills/transcribe/references)",
       "Edit(/.claude/skills/transcribe/**)",
-      "Edit(/.claude/skills/kn-map/**)",
+      "Edit(/.claude/skills/snapshot/**)",
       "Bash(python3 bin/rename_wiki_page.py:*)"
     ]
   },

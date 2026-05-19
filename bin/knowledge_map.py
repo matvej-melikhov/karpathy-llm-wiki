@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Knowledge map: dual-view wiki visualization with statistics.
+"""Snapshot: dual-view wiki visualization with statistics.
 
 Generates three artifacts on each run:
 
-    _attachments/knowledge-map-YYYY-MM-DD.html       Cytoscape (UMAP-pinned)
-    _attachments/wiki-graph-YYYY-MM-DD.html          Cytoscape (fcose-layout)
-    wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD.md    markdown with stats + iframes
+    _attachments/snapshot-YYYY-MM-DD.html         Cytoscape (UMAP-pinned)
+    _attachments/snapshot-graph-YYYY-MM-DD.html   Cytoscape (fcose-layout)
+    wiki/meta/snapshots/snapshot-YYYY-MM-DD.md    markdown with stats + iframes
 
 Both HTMLs run on the same Cytoscape.js stack (vendored in bin/vendor/) —
 the difference is layout, not engine:
 
-- knowledge-map: positions pinned to UMAP coordinates → proximity on
+- snapshot (UMAP): positions pinned to UMAP coordinates → proximity on
   screen = semantic similarity. Louvain compound parents disabled to keep
   the semantic reading clean.
-- wiki-graph: fcose force-directed layout → proximity on screen =
+- snapshot-graph (fcose): force-directed layout → proximity on screen =
   densely linked. Compound parents make Louvain communities visually
   obvious; bridge nodes get a gold-haloed star shape.
 
@@ -21,6 +21,10 @@ The .md page embeds both as iframes (via file:// URLs that Obsidian's
 iframe sandbox accepts) and adds counts, connectivity, Louvain diagnostics,
 and semantic-similarity distributions. Versioned filenames build a history
 of wiki growth, like lint-report-*.md.
+
+The markdown layout puts the headline metrics first; long tables and the
+"how to read" prose are folded into `<details>` blocks so the first screen
+stays numbers-only.
 
 Pipeline parts:
 - build_dataset: collect (name, vec, domains, links) for content pages
@@ -30,7 +34,7 @@ Pipeline parts:
 - compute_statistics: counts, connectivity, semantic structure
 - compute_graph_structure: Louvain communities + bridges + sparse clusters
 - wiki_graph.render_cytoscape_html: shared HTML renderer (preset / fcose)
-- render_artifact_page: combined markdown for wiki/meta/kn-maps/
+- render_artifact_page: combined markdown for wiki/meta/snapshots/
 
 Usage:
     python3 bin/knowledge_map.py                # both HTMLs + markdown
@@ -579,70 +583,30 @@ def compute_graph_structure(
 # ────────────────────────────────────────────────────────────────────────
 
 
-def _render_graph_sections(
-    graph: dict[str, Any],
-    *,
-    graph_iframe_src: str | None = None,
-    graph_html_filename: str | None = None,
-) -> list[str]:
-    """Render the topology block for the artifact page: optional Cytoscape
-    iframe + Russian markdown sections (communities, bridges, sparse).
-    Empty list if nothing meaningful to report.
-
-    The iframe (if provided) sits at the top of the topology block so the
-    visual is adjacent to its statistics, mirroring the UMAP-map / stats
-    pairing earlier on the page.
+def _render_graph_details(graph: dict[str, Any]) -> list[str]:
+    """Render Louvain detail tables (communities, bridges, sparse) inside
+    a single <details> block. The summary above the iframe table already
+    surfaces Q, the number of communities, and the top bridge — these
+    tables exist for users who want the full breakdown.
     """
-    out: list[str] = []
     comms = graph.get("communities") or []
-    Q = graph.get("modularity", 0.0)
+    bridges = graph.get("bridges") or []
+    sparse = graph.get("sparse") or []
 
-    out.extend([
+    out: list[str] = [
         "",
-        "## Топология wiki (Louvain)",
+        "<details>",
+        "<summary>Топология: сообщества, мосты, разреженные</summary>",
         "",
-        "Это **второй взгляд** на структуру vault — не по эмбеддингам "
-        "(семантика), а по wikilinks (как страницы реально друг друга "
-        "цитируют). Алгоритм Louvain находит группы страниц с плотными "
-        "связями внутри и слабыми наружу — реальные «кусты» твоей вики.",
-    ])
-
-    if graph_iframe_src is not None:
-        out.extend([
-            "",
-            f'<iframe src="{graph_iframe_src}" '
-            'style="width:100%; aspect-ratio: 4 / 3; border:1px solid #ccc; '
-            'border-radius:6px; display:block;"></iframe>',
-            "",
-            "Force-directed раскладка (fcose): близость на экране = "
-            "плотность связей. **Цвет** — primary domain (как на UMAP-карте "
-            "выше). **Размер** — √(число связей). **Золотая обводка** — "
-            "узлы-мосты. **Облака** — сообщества Louvain. "
-            "Hover по узлу подсвечивает соседей.",
-        ])
-        if graph_html_filename:
-            out.append("")
-            out.append(
-                f"Если iframe не отобразился, открой "
-                f"`_attachments/{graph_html_filename}` в браузере напрямую."
-            )
-
-    out.extend([
-        "",
-        "**Модулярность Q** — глобальная оценка качества разбиения. "
-        "Чем выше, тем чётче кусты отделены друг от друга. "
-        "Типичный диапазон для содержательных графов: 0.3–0.7. "
-        "Q ниже 0.3 — структура слабо выражена (мало связей или они "
-        "распределены равномерно).",
-        "",
-        f"- Q = **{Q:.3f}**",
         f"- Сообществ всего: **{graph.get('all_communities_count', 0)}** "
         f"(из них одиночек: {graph.get('singleton_communities', 0)})",
         f"- Сообществ ≥ {_MIN_COMMUNITY_SIZE} страниц: **{len(comms)}**",
-    ])
+    ]
 
     if comms:
         out.extend([
+            "",
+            "**Сообщества (Louvain).** Группы страниц с плотными связями внутри.",
             "",
             "| # | Размер | Страницы |",
             "|---:|---:|---|",
@@ -652,28 +616,8 @@ def _render_graph_sections(
             if len(members) > 5:
                 preview += f", … (+{len(members) - 5})"
             out.append(f"| {i} | {len(members)} | {preview} |")
-        out.append("")
-        out.append(
-            "Сравни этот разрез с раскраской на карте по `domain:`. "
-            "Совпадения подтверждают, что заявленная структура vault "
-            "соответствует реальной топологии. Расхождения — самое "
-            "интересное: либо домен размазан по нескольким сообществам "
-            "(возможно, его пора делить), либо одно сообщество тянет "
-            "страницы из разных доменов (междисциплинарная область)."
-        )
 
-    bridges = graph.get("bridges") or []
-    out.extend([
-        "",
-        "## Узлы-мосты",
-        "",
-        "Страницы, чьи wikilinks ведут сразу в несколько сообществ. "
-        "Метрика — **participation coefficient** $P$ "
-        "(0 = все ссылки в одном сообществе, ~1 = равномерно по нескольким). "
-        "Высокий $P$ + много связей = страница, держащая на себе "
-        "междисциплинарные нити vault. Стоит вкладываться: улучшение бьёт "
-        "по нескольким областям сразу.",
-    ])
+    out.extend(["", "**Узлы-мосты.** Wikilinks ведут сразу в несколько сообществ."])
     if bridges:
         out.extend([
             "",
@@ -687,23 +631,13 @@ def _render_graph_sections(
             )
     else:
         out.append("")
-        out.append("_Нет страниц, связывающих два или более сообществ. "
-                   "Либо граф ещё мал, либо сообщества полностью изолированы._")
+        out.append("_Нет страниц, связывающих два или более сообществ._")
 
-    sparse = graph.get("sparse") or []
     out.extend([
         "",
-        "## Разреженные сообщества",
-        "",
-        "Сообщества, которые Louvain собрал в кластер, но внутри которых "
-        "страницы почти не цитируют друг друга. Метрика — **внутренняя "
-        "плотность** $\\rho = 2e / n(n-1)$ (доля реализованных рёбер от "
-        f"возможных). Порог: $\\rho < {_SPARSE_COHESION_THRESHOLD}$ при "
-        f"размере ≥ {_MIN_COMMUNITY_SIZE} страниц.",
-        "",
-        "Сигнал «область заявлена, но недокручена»: связи между этими "
-        "страницами стоит явно прописать — либо это ложный кластер, и его "
-        "стоит проигнорировать.",
+        "**Разреженные сообщества.** Кластер собран Louvain, но внутри "
+        f"страницы почти не цитируют друг друга (порог $\\rho < "
+        f"{_SPARSE_COHESION_THRESHOLD}$, размер ≥ {_MIN_COMMUNITY_SIZE}).",
     ])
     if sparse:
         out.extend([
@@ -721,9 +655,9 @@ def _render_graph_sections(
             )
     else:
         out.append("")
-        out.append("_Все сообщества достаточно плотные — "
-                   "разреженных не обнаружено._")
+        out.append("_Все сообщества достаточно плотные._")
 
+    out.extend(["", "</details>"])
     return out
 
 
@@ -736,11 +670,11 @@ def render_artifact_page(
     graph_html_filename: str | None = None,
     graph_iframe_src: str | None = None,
 ) -> str:
-    """Render the wiki/meta/kn-maps/knowledge-map-YYYY-MM-DD.md artifact.
+    """Render the wiki/meta/snapshots/snapshot-YYYY-MM-DD.md artifact.
 
-    Output is in Russian, uses markdown tables for stats, and embeds the
-    Cytoscape HTMLs via iframes (Obsidian renders them in reading mode).
-    No PNG embed — the iframes are the canonical view.
+    Layout: headline metrics first (single table — what users come for),
+    then both interactive maps as iframes, then detail tables and prose
+    folded into <details> blocks. The first screen stays numbers-only.
 
     iframe_src / graph_iframe_src are the URLs the iframes point to.
     Caller should construct them as file:// URLs against the absolute path
@@ -748,13 +682,6 @@ def render_artifact_page(
     sandbox reliably.
     """
     total_pages = sum(stats["type_counts"].values())
-
-    # Russian labels for page types
-    _TYPE_LABEL = {
-        "idea": "идеи", "entity": "сущности",
-        "question": "вопросы", "domain": "домены",
-        "mind": "мысли",
-    }
 
     # Default fallback if caller doesn't provide an explicit URL
     if iframe_src is None:
@@ -768,94 +695,104 @@ def render_artifact_page(
         f"domains_count: {len(stats['domain_counts'])}",
         "---",
         "",
-        f"# Карта знаний — {generated_at[:10]}",
+        f"# Snapshot — {generated_at[:10]}",
         "",
-        "## Интерактивная карта",
+        "## Метрики",
+        "",
+        "| Метрика | Значение |",
+        "|---|---:|",
+        f"| Страниц всего | **{total_pages}** |",
+        f"| Доменов | {len(stats['domain_counts'])} |",
+        f"| Без домена | {stats['unassigned']} |",
+        f"| Wikilinks (валидных) | {stats['valid_outlinks']} |",
+        f"| Страниц-сирот | {len(stats['orphans'])} |",
+    ]
+    if stats["most_connected"]:
+        top = stats["most_connected"][0]
+        lines.append(
+            f"| Самая связанная | [[{top['name']}]] ({top['inbound']} входящих) |"
+        )
+    if graph is not None:
+        Q = graph.get("modularity", 0.0)
+        comms = graph.get("communities") or []
+        lines.append(f"| Модулярность Q (Louvain) | {Q:.3f} |")
+        lines.append(
+            f"| Сообществ (≥ {_MIN_COMMUNITY_SIZE} страниц) | {len(comms)} |"
+        )
+        bridges = graph.get("bridges") or []
+        if bridges:
+            b = bridges[0]
+            lines.append(
+                f"| Топ-мост | [[{b['name']}]] "
+                f"(P={b['participation']:.2f}, {b['degree']} связей, "
+                f"{b['spans']} сообществ) |"
+            )
+    lines.append(f"| Медиана попарной близости | {stats['sim_median']:.3f} |")
+    lines.append(f"| 95-й перцентиль близости | {stats['sim_p95']:.3f} |")
+    if stats["tightest_pair"]:
+        a, b, s = stats["tightest_pair"]
+        lines.append(f"| Самая близкая пара | [[{a}]] ↔ [[{b}]] ({s:.3f}) |")
+    if stats["most_isolated"]:
+        n, m = stats["most_isolated"]
+        lines.append(f"| Самая изолированная | [[{n}]] (max близость {m:.3f}) |")
+
+    # ─── Maps ─────────────────────────────────────────────────────────
+    lines.extend([
+        "",
+        "## Карты",
+        "",
+        "**UMAP-проекция (семантика).** Близость на экране = семантическая "
+        "близость по эмбеддингам.",
         "",
         f'<iframe src="{iframe_src}" '
         'style="width:100%; aspect-ratio: 4 / 3; border:1px solid #ccc; '
         'border-radius:6px; display:block;"></iframe>',
         "",
         f"Если iframe не отобразился, открой `_attachments/{html_filename}` "
-        "в браузере напрямую — там доступны zoom, pan и hover с подробностями "
-        "о каждой странице.",
-        "",
-        "## Как читать",
-        "",
-        "Каждая точка — одна wiki-страница. Координаты — двумерная "
-        "**UMAP-проекция** эмбеддинга страницы (4096-мерный вектор → 2D). "
-        "Чем ближе точки на карте, тем семантически ближе страницы по эмбеддингу "
-        "(не по wikilink-связям).",
-        "",
-        "- **Цвет** — **первый домен** в `domain:` страницы. По convention "
-        "wiki, домены перечисляются от частного к общему, поэтому первый — "
-        "самый специфичный. Например, у страницы с "
-        "`[Reinforcement Learning, Machine Learning]` цвет — RL. "
-        "Полный список доменов виден в hover. Серый — страница без домена.",
-        "- **Размер** — тип страницы: domain-хабы крупнее, остальные одного "
-        "размера. Семантическая карта намеренно не кодирует число связей — "
-        "топологические сигналы живут на форс-графе ниже.",
-        "- **Линии** — wikilinks между страницами (полупрозрачные). "
-        "Видно где явные связи совпадают с семантическими, а где расходятся.",
-        "- **Hover** на узле подсвечивает его 1-hop соседей и затемняет "
-        "остальное — удобно для исследования окрестности страницы.",
-        "",
-        "Когерентный кластер — много точек одного цвета рядом. Если страница "
-        "оторвалась от своего цветового кластера — её эмбеддинг ушёл в чужую "
-        "семантическую область (потенциальный сигнал для ingest или lint). "
-        "Изолированная точка — семантически уникальная страница (или сирота).",
-        "",
-        "## Счётчики",
-        "",
-        "| Тип | Количество |",
-        "|---|---:|",
-    ]
-    for t, n in sorted(stats["type_counts"].items()):
-        label = _TYPE_LABEL.get(t, t)
-        lines.append(f"| {label} | {n} |")
-    lines.append(f"| без домена | {stats['unassigned']} |")
-    lines.append(f"| **всего** | **{total_pages}** |")
+        "в браузере.",
+    ])
 
+    if graph_iframe_src is not None:
+        lines.extend([
+            "",
+            "**Force-directed граф (топология).** Близость на экране = "
+            "плотность wikilink-связей. Облака — сообщества Louvain, "
+            "золотая обводка — узлы-мосты.",
+            "",
+            f'<iframe src="{graph_iframe_src}" '
+            'style="width:100%; aspect-ratio: 4 / 3; border:1px solid #ccc; '
+            'border-radius:6px; display:block;"></iframe>',
+        ])
+        if graph_html_filename:
+            lines.extend([
+                "",
+                f"Если iframe не отобразился, открой "
+                f"`_attachments/{graph_html_filename}` в браузере.",
+            ])
+
+    # ─── Domains breakdown (short, kept inline — usually 3–6 rows) ────
     if stats["domain_counts"]:
         lines.extend([
             "",
             "## Домены",
             "",
-            "| Домен | Страниц |",
-            "|---|---:|",
+            "| Домен | Страниц | Avg internal cosine |",
+            "|---|---:|---:|",
         ])
+        avg = stats.get("domain_avg_cosine") or {}
         for d, n in sorted(stats["domain_counts"].items(), key=lambda x: -x[1]):
-            lines.append(f"| [[{d}]] | {n} |")
+            cosine_cell = f"{avg[d]:.3f}" if d in avg else "—"
+            lines.append(f"| [[{d}]] | {n} | {cosine_cell} |")
 
-    lines.extend([
-        "",
-        "## Связность",
-        "",
-        "| Метрика | Значение |",
-        "|---|---:|",
-        f"| Wikilinks (валидных) | {stats['valid_outlinks']} |",
-        f"| Страниц-сирот | {len(stats['orphans'])} |",
-    ])
-    if stats["most_connected"]:
-        top = stats["most_connected"][0]
-        lines.append(
-            f"| Самая связанная | [[{top['name']}]] ({top['inbound']} входящих) |"
-        )
-
-    # ─── Topological view (Louvain communities + diagnostics) ─────────
+    # ─── Topology details (Louvain) ───────────────────────────────────
     if graph is not None:
-        lines.extend(_render_graph_sections(
-            graph,
-            graph_iframe_src=graph_iframe_src,
-            graph_html_filename=graph_html_filename,
-        ))
+        lines.extend(_render_graph_details(graph))
 
+    # ─── Semantic distribution details ────────────────────────────────
     lines.extend([
         "",
-        "## Семантическая структура",
-        "",
-        "Распределение попарных косинусных близостей всех wiki-страниц "
-        "с эмбеддингами.",
+        "<details>",
+        "<summary>Распределение попарной близости (полное)</summary>",
         "",
         "| Метрика | Значение |",
         "|---|---:|",
@@ -864,35 +801,50 @@ def render_artifact_page(
         f"| 75-й перцентиль | {stats['sim_p75']:.3f} |",
         f"| 95-й перцентиль | {stats['sim_p95']:.3f} |",
         f"| Максимум | {stats['sim_max']:.3f} |",
+        "",
+        "</details>",
     ])
-    if stats["tightest_pair"]:
-        a, b, s = stats["tightest_pair"]
-        lines.append(f"| Самая близкая пара | [[{a}]] ↔ [[{b}]] ({s:.3f}) |")
-    if stats["most_isolated"]:
-        n, m = stats["most_isolated"]
-        lines.append(f"| Самая изолированная | [[{n}]] (max близость {m:.3f}) |")
 
-    if stats["domain_avg_cosine"]:
-        lines.extend([
-            "",
-            "## Связность доменов",
-            "",
-            "**Avg internal cosine** — средняя попарная близость страниц одного "
-            "домена. Высокое значение (>0.6) — плотный когерентный кластер. "
-            "Низкое — домен размазан по нескольким темам, возможно стоит разбить "
-            "на под-домены.",
-            "",
-            "| Домен | Страниц | Avg internal cosine |",
-            "|---|---:|---:|",
-        ])
-        for d in sorted(
-            stats["domain_avg_cosine"],
-            key=lambda x: -stats["domain_counts"].get(x, 0),
-        ):
-            lines.append(
-                f"| [[{d}]] | {stats['domain_counts'][d]} | "
-                f"{stats['domain_avg_cosine'][d]:.3f} |"
-            )
+    # ─── How to read the maps ─────────────────────────────────────────
+    lines.extend([
+        "",
+        "<details>",
+        "<summary>Как читать карты и метрики</summary>",
+        "",
+        "**UMAP-карта.** Каждая точка — одна wiki-страница. Координаты — "
+        "двумерная UMAP-проекция эмбеддинга (4096-мерный вектор → 2D). "
+        "Чем ближе точки, тем семантически ближе страницы.",
+        "",
+        "- **Цвет** — первый домен в `domain:` страницы (по convention, "
+        "от частного к общему — первый самый специфичный). Серый — без домена.",
+        "- **Размер** — domain-хабы крупнее, остальные одинаковые. "
+        "Семантическая карта намеренно не кодирует число связей.",
+        "- **Линии** — wikilinks между страницами (полупрозрачные).",
+        "- **Hover** на узле подсвечивает 1-hop соседей.",
+        "",
+        "Когерентный кластер — много точек одного цвета рядом. Страница "
+        "оторвалась от своего цветового кластера — её эмбеддинг ушёл "
+        "в чужую семантическую область (сигнал для ingest или lint).",
+        "",
+        "**Force-directed граф.** Близость = плотность связей (fcose layout). "
+        "Цвет — primary domain. Размер — √(число связей). Золотая обводка — "
+        "узлы-мосты. Облака — сообщества Louvain.",
+        "",
+        "**Модулярность Q** — глобальная оценка качества разбиения на сообщества. "
+        "Типичный диапазон содержательных графов: 0.3–0.7. Q < 0.3 — структура "
+        "слабо выражена.",
+        "",
+        "**Participation coefficient P** (для мостов) — насколько wikilinks "
+        "страницы распределены между сообществами. P=0 — все ссылки в одном "
+        "сообществе, P≈1 — равномерно по нескольким. Высокий P + много связей = "
+        "страница, держащая на себе междисциплинарные нити vault.",
+        "",
+        "**Avg internal cosine** (в таблице доменов) — средняя попарная близость "
+        "страниц одного домена. >0.6 — плотный когерентный кластер. Низкое — "
+        "домен размазан по темам, возможно стоит разбить.",
+        "",
+        "</details>",
+    ])
 
     return "\n".join(lines) + "\n"
 
@@ -910,9 +862,9 @@ def main() -> int:
     ap.add_argument("--no-edges", action="store_true",
                     help="skip wikilink edge overlay on the UMAP map")
     ap.add_argument("--no-page", action="store_true",
-                    help="skip generating wiki/meta/kn-maps/knowledge-map-*.md")
+                    help="skip generating wiki/meta/snapshots/snapshot-*.md")
     ap.add_argument("--no-graph", action="store_true",
-                    help="skip generating the Cytoscape wiki-graph HTML")
+                    help="skip generating the Cytoscape snapshot-graph HTML")
     ap.add_argument("--seed", type=int, default=42,
                     help="UMAP random_state for reproducibility (default: 42)")
     ap.add_argument("--out-dir", type=Path, default=Path("_attachments"),
@@ -995,7 +947,7 @@ def main() -> int:
     # 6. Output paths
     args.out_dir.mkdir(parents=True, exist_ok=True)
     today = dt.date.today().isoformat()
-    base = f"knowledge-map-{today}"
+    base = f"snapshot-{today}"
     html_path = args.out_dir / f"{base}.html"
 
     # 7a. Graph topology (Louvain + bridges + sparse) — used by both views.
@@ -1037,7 +989,7 @@ def main() -> int:
     # the layout itself; degree-sized nodes added visual noise on top.
     graph_html_path: Path | None = None
     if not args.no_graph and edges:
-        graph_html_path = args.out_dir / f"wiki-graph-{today}.html"
+        graph_html_path = args.out_dir / f"snapshot-graph-{today}.html"
         graph_html = render_cytoscape_html(
             infos_with_vecs, edges, graph, domain_to_color,
             page_title="Граф wiki — топология",
@@ -1078,7 +1030,7 @@ def main() -> int:
             graph_html_filename=graph_html_filename,
             graph_iframe_src=graph_iframe_src,
         )
-        artifact_dir = WIKI_ROOT / "meta" / "kn-maps"
+        artifact_dir = WIKI_ROOT / "meta" / "snapshots"
         artifact_dir.mkdir(parents=True, exist_ok=True)
         artifact_path = artifact_dir / f"{base}.md"
         artifact_path.write_text(page_md, encoding="utf-8")
