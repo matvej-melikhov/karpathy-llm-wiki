@@ -25,6 +25,45 @@ Lint — единственный owner всего пайплайна обраб
 
 ---
 
+## Итоговый отчёт (всегда первым в чате)
+
+После Step 1 и Step 4 (то есть когда уже понятна суммарная статистика по
+авто-фиксам) — выдай **одну строку сводки** ещё до ask-диалога:
+
+```
+Lint завершён. Script auto-fix: 5 (inline-tags×2, non-canonical-wikilink×2, missing-summary handled by agent). Agent auto-fix: 1 (missing-summary). Ask: 2.
+```
+
+Правила:
+
+- Сводка — одна строка, в формате «N (тип×k, тип×k, …)» для каждой категории.
+  Если в категории один issue — `тип` без ×k.
+- Источник script-фиксов — `lint-state.json::applied_script_fixes`. Это
+  список `{type, where}`, собранный скриптом за этот запуск.
+- Если applied_script_fixes пуст — пиши «Script auto-fix: 0» или вообще
+  опусти эту часть.
+- Если хочешь дать полный список «что и где» — оборачивай в `<details>`,
+  чтобы не загромождать чат:
+
+  ```
+  <details>
+  <summary>Что было автоматически исправлено</summary>
+
+  - inline-tags → wiki/ideas/X.md
+  - inline-tags → wiki/ideas/Y.md
+  - non-canonical-wikilink → wiki/entities/Z.md
+  …
+
+  </details>
+  ```
+
+- Если open_issues пуст и applied_script_fixes пуст — короткое «wiki чистая, изменений
+  не было», без таблиц.
+
+Дальше — ask-диалог по оставшимся issues, как обычно.
+
+---
+
 ## Pipeline
 
 ### Step 1. Запустить `bin/static_lint.py`

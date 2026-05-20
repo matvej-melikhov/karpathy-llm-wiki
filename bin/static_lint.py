@@ -1272,14 +1272,20 @@ def issue_involves_pages(issue: Issue, page_set: set[str]) -> bool:
     return any(p in page_set for p in candidates)
 
 
-def apply_auto_fixes(issues: list[Issue]) -> tuple[list[Issue], int]:
-    """Try to apply auto-fix for each issue. Return (remaining, fixed_count).
+def apply_auto_fixes(issues: list[Issue]) -> tuple[list[Issue], list[dict[str, str]]]:
+    """Try to apply auto-fix for each issue. Return (remaining, applied).
+
+    `applied` is the per-fix journal that gets surfaced to the lint skill
+    and the user: a list of `{"type": <issue_type>, "where": <page_path>}`
+    entries describing every change made on this run. Without this the
+    Layer-1 pass would be silent — the user only ever sees the leftover
+    ask-issues, not the cleanup that already happened.
 
     Issues without a handler stay in `remaining`. Failed fixes (handler
     returned False or raised) also stay — they'll be retried next /lint.
     """
     remaining: list[Issue] = []
-    fixed = 0
+    applied: list[dict[str, str]] = []
     for issue in issues:
         handler = FIX_HANDLERS.get(issue.type)
         if handler is None:
@@ -1287,12 +1293,18 @@ def apply_auto_fixes(issues: list[Issue]) -> tuple[list[Issue], int]:
             continue
         try:
             if handler(issue.payload):
-                fixed += 1
+                payload = issue.payload
+                where = (
+                    payload.get("where")
+                    or payload.get("page_a")
+                    or "<unknown>"
+                )
+                applied.append({"type": issue.type, "where": where})
             else:
                 remaining.append(issue)
         except Exception:
             remaining.append(issue)
-    return remaining, fixed
+    return remaining, applied
 
 
 # Registry: ordered list of (issue_type_string, check_function)
@@ -1706,10 +1718,11 @@ def main() -> int:
     issues = run_all_checks(pages, filter_type=args.check, extra_checks=extra_checks)
 
     # Apply script auto-fixes inline. Anything not script-fixable (agent fix
-    # or ask-issue) stays in `remaining`.
-    remaining, fixed = apply_auto_fixes(issues)
+    # or ask-issue) stays in `remaining`. `applied` carries the per-fix
+    # journal so the lint skill can surface it instead of staying silent.
+    remaining, applied = apply_auto_fixes(issues)
 
-    if fixed:
+    if applied:
         # Re-discover and re-hash because file contents changed
         pages = discover_pages()
         wiki_hash = compute_wiki_hash(pages)
@@ -1733,6 +1746,7 @@ def main() -> int:
         "last_audit": dt.datetime.now().isoformat(timespec="seconds"),
         "files_checked": len(pages),
         "page_hashes": current_page_hashes,
+        "applied_script_fixes": applied,
         "open_issues": [iss.to_dict() for iss in merged],
     }
     if contradiction_candidates:
@@ -1742,9 +1756,17 @@ def main() -> int:
     mode = "full" if args.full else "quick"
     print(
         f"checked {len(pages)} pages [{mode}], "
-        f"touched {len(touched)}, fixed {fixed}, "
+        f"touched {len(touched)}, fixed {len(applied)}, "
         f"{len(merged)} remaining"
     )
+    if applied:
+        from collections import Counter
+        breakdown = Counter(a["type"] for a in applied)
+        summary = ", ".join(
+            f"{t}×{n}" if n > 1 else t
+            for t, n in sorted(breakdown.items())
+        )
+        print(f"  script auto-fix: {summary}")
     if args.json:
         print(json.dumps(new_state, ensure_ascii=False, indent=2))
 
