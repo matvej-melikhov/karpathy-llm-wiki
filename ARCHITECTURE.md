@@ -33,7 +33,7 @@ Vault разделён на четыре слоя по жизненному ци
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- |
 | `wiki/index.md`   | Индекс всех страниц с кратким саммари. Точка входа для query/ingest. **Генерируется автоматически** по `summary` во frontmatter каждой страницы. | generated        |
 | `wiki/log.md`     | Хронологический журнал операций. Новые записи **сверху**. Не сжимается.                                                                          | append-only      |
-| `wiki/cache.md`   | Горячий кэш ~500 слов: актуальный контекст. Бюджет hard-cap 700 слов.                                                                            | **overwrite**    |
+| `wiki/cache.md`   | Горячий кэш ~500 слов: актуальный контекст. Бюджет hard-cap 700 слов.                                                                            | **curated rewrite** (см. CLAUDE.md §Кэш контекста) |
 | `wiki/summary.md` | Обзор vault (счётчики, домены, статус).                                                                                                          | overwrite        |
 
 ### 1.4 Метаданные (auto-generated)
@@ -61,8 +61,12 @@ Vault разделён на четыре слоя по жизненному ци
 | `ingest`         | `wiki/{ideas,entities,domains}/`, `wiki/{cache,log,summary}.md`, `_attachments/`                    |
 | `save`           | `wiki/questions/`, `wiki/{cache,log}.md`                                                            |
 | `brainstorm`     | `wiki/minds/`, `raw/brainstorm/<date>-<slug>.md`, `wiki/{cache,log}.md`                             |
-| `query`          | `wiki/questions/` (опц.)  через делегирование на save, обновляет `cache.md` после значимых ответов  |
+| `study`          | через делегирование на `/save` — `wiki/{ideas,questions}/` с `provenance: study`, `wiki/{cache,log}.md` |
+| `query`          | `wiki/questions/` (опц.) через делегирование на save, обновляет `cache.md` после значимых ответов   |
+| `edge`           | read-only — только статистика на stdout                                                             |
+| `snapshot`       | `_attachments/snapshot-*.html`, `_attachments/snapshot-graph-*.html`, `wiki/meta/snapshots/snapshot-*.md` |
 | `lint`           | `wiki/meta/lint-reports/lint-state.json` (+ опц. отчёт), content-файлы                              |
+| `help`           | read-only — справка по скиллам из `.claude/skills/*/SKILL.md`                                       |
 | `transcribe`     | `raw/<имя>.md` (транскрибация из `raw/formats/...`)                                                 |
 | `obsidian-bases` | `wiki/meta/dashboards/*.base` (только нешаблонные / разовые правки)                                 |
 | `defuddle`       | возвращает markdown в stdout — фактическую запись в `raw/` делает пользователь или вызывающий скилл |
