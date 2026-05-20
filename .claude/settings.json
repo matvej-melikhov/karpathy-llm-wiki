@@ -14,6 +14,7 @@
       "Bash(mkdir -p .claude/skills/transcribe/references)",
       "Edit(/.claude/skills/transcribe/**)",
       "Edit(/.claude/skills/snapshot/**)",
+      "Edit(/.claude/skills/help/**)",
       "Bash(python3 bin/rename_wiki_page.py:*)"
     ]
   },

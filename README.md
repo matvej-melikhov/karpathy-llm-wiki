@@ -47,6 +47,7 @@ Per-user контент (`raw/`, `wiki/`, `_attachments/`) исключён из
 | **defuddle** | внутренний | Чистит web-страницы от nav/ads/sidebar, отдаёт markdown для url-ingest |
 | **obsidian-bases** | внутренний | Создание Obsidian Bases-файлов (.base) для динамических view |
 | **obsidian-markdown** | внутренний | Гайд по Obsidian-flavored markdown: wikilinks, embeds, properties |
+| **help** | `/help` | Список всех скиллов или подробная справка по одному (`/help <команда>`) |
 
 Скиллы лежат в [`.claude/skills/`](./.claude/skills); каждый — самостоятельный SKILL.md с инструкцией и ссылками на references.
 
