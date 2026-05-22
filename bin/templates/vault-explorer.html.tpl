@@ -1206,14 +1206,22 @@ function showPlaceholder(canvasId, label) {
 
 if (sankeyData && sankeyData.length > 0) {
   try {
+    // Pre-assign colors so each domain and each community gets its own
+    // tone (palette + indexed fallback). Without this, all flows render
+    // as the same grey because palette has no entries for full domain
+    // names like "Machine Learning" or for "Сообщество N" labels.
+    const sankeyColor = {};
+    [...new Set(sankeyData.map(d => d.from))].forEach((k, i) => { sankeyColor[k] = colorFor(k, i); });
+    [...new Set(sankeyData.map(d => d.to))].forEach((k, i) => { sankeyColor[k] = colorFor(k, i + 4); });
+
     new Chart(document.getElementById("map-sankey"), {
       type: "sankey",
       data: {
         datasets: [{
           label: "Domain → Community flow",
           data: sankeyData,
-          colorFrom: c => palette[c.dataset.data[c.dataIndex].from] || "#888",
-          colorTo: c => palette[c.dataset.data[c.dataIndex].to] || "#888",
+          colorFrom: c => sankeyColor[c.dataset.data[c.dataIndex].from] || "#888",
+          colorTo: c => sankeyColor[c.dataset.data[c.dataIndex].to] || "#888",
           colorMode: "gradient",
           borderWidth: 0,
         }],
@@ -1285,7 +1293,10 @@ if (treemapData && treemapData.length > 0) {
           backgroundColor: ctx => {
             if (ctx.type !== "data") return "transparent";
             const o = ctx.raw._data;
-            return colorFor(o.domain, 0);
+            // Same color per domain — index by position in domainKeys + 1
+            // for stability (so 'Machine Learning' is always #4a9eff etc.).
+            const idx = domainKeys.indexOf(o.domain);
+            return colorFor(o.domain, idx >= 0 ? idx : 0);
           },
           labels: {
             display: true,

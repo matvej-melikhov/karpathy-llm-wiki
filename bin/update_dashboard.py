@@ -60,8 +60,17 @@ VENDOR_JS_FILES = (
 )
 
 VAULT_NAME = "llm-wiki"   # override via env or repo config later if needed
+LOG_PATH = WIKI_ROOT / "log.md"
 
 HISTORY_RETENTION_ENTRIES = 365  # keep at most a year of records
+
+# Map of log.md operation names → short trigger labels surfaced in the
+# dashboard's pulse/chronology. log.md is the primary source of truth for
+# what kind of turn just happened.
+LOG_OP_PATTERN = re.compile(
+    r"^##\s+(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?)\s*[—\-–]\s*([\w/]+)",
+    re.MULTILINE,
+)
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -731,26 +740,66 @@ def build_cards(metrics: dict[str, Any], history: list[dict[str, Any]]) -> dict[
     }
 
 
-def merge_heavy_data(prev_html: str | None) -> dict[str, Any]:
-    """Extract sankey/treemap/insights from previous vault-explorer.html
-    so light updates don't wipe them out.
+HEAVY_PATH = META_DIR / "snapshots" / "heavy.json"
+
+
+def detect_trigger_from_log() -> str | None:
+    """Read the most recent operation header from wiki/log.md.
+
+    log.md format (new entries on top):
+        ## YYYY-MM-DD — ingest | Title
+        - Тип: idea
+        ...
+
+    Returns the operation name ('ingest', 'save', 'brainstorm', ...) or
+    None if the log file is missing or the first header doesn't parse.
     """
-    out = {"sankey": [], "treemap": [], "insights": {}}
-    if not prev_html:
-        return out
-    m = re.search(
-        r'<script id="dashboard-data" type="application/json">(.+?)</script>',
-        prev_html, re.DOTALL,
-    )
-    if not m:
+    if not LOG_PATH.exists():
+        return None
+    text = LOG_PATH.read_text(encoding="utf-8", errors="replace")
+    m = LOG_OP_PATTERN.search(text)
+    if m is None:
+        return None
+    return m.group(2).strip().lower()
+
+
+def has_meaningful_change(delta: dict[str, Any] | None) -> bool:
+    """A turn moved the needle if pages were added/removed or wikilinks
+    changed. Pure-recompute turns (no diff) don't deserve their own
+    history entry — they'd just clutter the chronology."""
+    if delta is None:
+        return False
+    if delta.get("pages_added"):
+        return True
+    if delta.get("pages_removed"):
+        return True
+    if delta.get("wikilinks"):
+        return True
+    return False
+
+
+def load_heavy_data() -> dict[str, Any]:
+    """Read the heavy artifact (sankey + treemap + insights + dated map
+    paths) written by bin/knowledge_map.py. Returns empty defaults if
+    the file doesn't exist — the dashboard will show placeholder text
+    inviting the user to run /snapshot."""
+    out = {
+        "sankey": [],
+        "treemap": [],
+        "insights": {},
+        "umap_iframe": None,
+        "graph_iframe": None,
+        "snapshot_date": None,
+    }
+    if not HEAVY_PATH.exists():
         return out
     try:
-        prev = json.loads(m.group(1))
+        h = json.loads(HEAVY_PATH.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return out
-    for k in ("sankey", "treemap", "insights"):
-        if k in prev and prev[k]:
-            out[k] = prev[k]
+    for k in ("sankey", "treemap", "insights", "umap_iframe", "graph_iframe", "snapshot_date"):
+        if k in h:
+            out[k] = h[k]
     return out
 
 
@@ -843,7 +892,9 @@ def render_dashboard(data: dict[str, Any]) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--trigger", default="auto", help="trigger label for the history entry")
+    ap.add_argument("--trigger", default=None,
+                    help="trigger label for the history entry "
+                         "(default: auto-detect from wiki/log.md)")
     args = ap.parse_args()
 
     pages = discover_pages()
@@ -854,18 +905,32 @@ def main() -> int:
     metrics = compute_all_metrics(pages)
     wordcloud = compute_wordcloud(pages)
 
+    # Trigger detection: explicit arg wins; otherwise pull from log.md.
+    trigger = args.trigger or detect_trigger_from_log() or "auto"
+
     history = load_history()
     prev = history[-1] if history else None
-    entry = build_history_entry(metrics, args.trigger, prev)
-    history = update_history(history, entry)
-    save_history(history)
+    entry = build_history_entry(metrics, trigger, prev)
 
-    snap = find_latest_snapshot()
+    # Skip silent turns: if the vault didn't change, don't pollute the
+    # chronology with an empty entry. The dashboard still re-renders
+    # with current metrics — only history.jsonl stays as is.
+    if has_meaningful_change(entry["delta"]) or prev is None:
+        history = update_history(history, entry)
+        save_history(history)
+
     cards = build_cards(metrics, history)
     health = compute_health(metrics)
 
-    prev_html = OUTPUT_HTML.read_text(encoding="utf-8") if OUTPUT_HTML.exists() else None
-    heavy = merge_heavy_data(prev_html)
+    # Heavy data from the last /snapshot run (sankey + treemap + insights +
+    # dated map paths). Falls back to filesystem scan if heavy.json isn't
+    # there yet — so the dashboard still embeds whatever dated maps exist.
+    heavy = load_heavy_data()
+    if not heavy["umap_iframe"]:
+        scan = find_latest_snapshot()
+        heavy["umap_iframe"] = scan["umap_iframe"]
+        heavy["graph_iframe"] = scan["graph_iframe"]
+        heavy["snapshot_date"] = scan["date"]
 
     data = {
         "now": dt.datetime.now().isoformat(timespec="minutes"),
@@ -877,9 +942,9 @@ def main() -> int:
         "sankey": heavy["sankey"],
         "treemap": heavy["treemap"],
         "insights": heavy["insights"],
-        "latest_snapshot_date": snap["date"],
-        "umap_iframe": snap["umap_iframe"],
-        "graph_iframe": snap["graph_iframe"],
+        "latest_snapshot_date": heavy["snapshot_date"],
+        "umap_iframe": heavy["umap_iframe"],
+        "graph_iframe": heavy["graph_iframe"],
         "cards": cards,
         "health": health,
     }

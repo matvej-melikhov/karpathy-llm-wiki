@@ -20,7 +20,7 @@
 | `wiki/domains/` | Навигационные хабы по областям (MOC), создаются при пороге N=10 | `/ingest` |
 | `wiki/questions/` | Сохранённые ответы из чата | `/save`, `/query` |
 | `wiki/minds/` | Авторские мысли, склеенные из brainstorm-сессий | `/brainstorm` |
-| `wiki/meta/` | Эмбеддинги, lint-state, snapshots, дашборды — derivable | `bin/*`, `/lint`, `/snapshot` |
+| `wiki/meta/` | Эмбеддинги, lint-state, dated snapshots, `vault-explorer.html` (живой дашборд), `history.jsonl`, `heavy.json` — derivable | `bin/*`, `/lint`, `/snapshot`, `update_dashboard.py` |
 | `wiki/{cache,log,index,summary}.md` | Горячий контекст, журнал, каталог, обзор | скиллы + `bin/gen_index.py` |
 
 Per-user контент (`raw/`, `wiki/`, `_attachments/`) исключён из репозитория. Коммитится только инфраструктура: skills, шаблоны, скрипты.
@@ -42,7 +42,7 @@ Per-user контент (`raw/`, `wiki/`, `_attachments/`) исключён из
 | **study** | `/study` | Учебный режим: отвечает по training knowledge + WebSearch, по запросу файлирует в wiki |
 | **edge** | `/edge` | Показывает фронтир базы — страницы с большим out-/in-link disbalance, предлагает что углубить дальше |
 | **lint** | `/lint` | Статические + LLM-проверки wiki, автофиксы, диалог по ask-issues |
-| **snapshot** | `/snapshot` | UMAP по семантике + force-graph по wikilinks; метрики + рендер в `wiki/meta/snapshots/` |
+| **snapshot** | `/snapshot` | Тяжёлый контур vault-дашборда: UMAP + force-graph + sankey + treemap + 5 LLM-инсайтов. Дашборд (`wiki/meta/vault-explorer.html`) сам по себе обновляется числовыми метриками после каждого turn'а через Stop-hook → `bin/update_dashboard.py` |
 | **transcribe** | `/transcribe` | PDF/DOCX → markdown в `raw/` (mechanical convert + agentic structure repair) |
 | **defuddle** | внутренний | Чистит web-страницы от nav/ads/sidebar, отдаёт markdown для url-ingest |
 | **obsidian-bases** | внутренний | Создание Obsidian Bases-файлов (.base) для динамических view |

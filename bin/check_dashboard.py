@@ -31,16 +31,25 @@ with sync_playwright() as p:
     page.wait_for_load_state("networkidle", timeout=10000)
     page.wait_for_timeout(1000)
 
-    # Inspect what got rendered
+    # Switch to Maps tab so the sankey/treemap canvases are visible (Chart.js
+    # skips drawing while parents are display:none).
+    page.click('.tab-btn[data-panel="maps"]')
+    page.wait_for_timeout(500)
+
     checks = {
-        "health value":      "document.querySelector('#health-score .value').textContent.trim()",
-        "hero pages":        "document.querySelector('#hero-pages-value').textContent.trim()",
-        "dist-types canvas": "document.querySelector('#dist-types').width",
+        "health value":          "document.querySelector('#health-score .value').textContent.trim()",
+        "hero pages":            "document.querySelector('#hero-pages-value').textContent.trim()",
+        "dist-types canvas":     "document.querySelector('#dist-types').width",
         "dist-domains rendered": "document.querySelector('#dist-domains').width > 0",
-        "wordcloud children": "document.querySelector('#map-wordcloud').children.length",
-        "one-line text":     "document.querySelector('#one-line').textContent.trim().slice(0, 80)",
-        "pulse-last text":   "document.querySelector('#pulse-last-turn').textContent.trim().slice(0, 80)",
-        "diff-history items": "document.querySelector('#diff-history-list').children.length",
+        "wordcloud children":    "document.querySelector('#map-wordcloud').children.length",
+        "one-line text":         "document.querySelector('#one-line').textContent.trim().slice(0, 80)",
+        "pulse-last text":       "document.querySelector('#pulse-last-turn').textContent.trim().slice(0, 80)",
+        "diff-history items":    "document.querySelector('#diff-history-list').children.length",
+        "iframe-umap src":       "(document.querySelector('#iframe-umap').src || '').slice(-60)",
+        "iframe-graph src":      "(document.querySelector('#iframe-graph').src || '').slice(-60)",
+        "sankey canvas drawn":   "document.querySelector('#map-sankey') ? document.querySelector('#map-sankey').width > 0 : 'no canvas'",
+        "treemap canvas drawn":  "document.querySelector('#map-treemap') ? document.querySelector('#map-treemap').width > 0 : 'no canvas'",
+        "insight-umap text":     "document.querySelector('#insight-umap').textContent.trim().slice(0, 80)",
     }
     print("=== Render checks ===")
     for label, expr in checks.items():

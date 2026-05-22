@@ -4,6 +4,8 @@ Obsidian-vault, управляемый агентом. Реализует пат
 
 **Скиллы:** `/ingest`, `/query`, `/study`, `/lint`, `/save`, `/brainstorm`, `/edge`, `/snapshot`, `/transcribe`, `/defuddle`, `/obsidian-bases`, `/obsidian-markdown`, `/help`
 
+**Дашборд:** `wiki/meta/vault-explorer.html` — открой в Obsidian (через HTML-плагин) или в браузере. Лёгкие метрики (счётчики, time-series, pulse, word cloud, distributions, health score) обновляются автоматически после каждого turn'а через Stop-hook (`bin/update_dashboard.py`). Тяжёлая часть (UMAP, force-graph, sankey, treemap, инсайты к 5 картам) — через `/snapshot` или раз в сутки.
+
 ## Структура wiki
 
 | Путь              | Назначение                                       | Владелец                                                          | Режим агента        |
@@ -23,7 +25,11 @@ Obsidian-vault, управляемый агентом. Реализует пат
 | `wiki/log.md`     | Журнал операций                                  | все скиллы                                                        | **append** (сверху) |
 | `wiki/cache.md`   | Горячий кэш ~500 слов (актуальный контекст)      | `ingest`, `save`, `query`, `brainstorm`                           | **overwrite**       |
 | `wiki/summary.md` | Обзор vault (счётчики, статус)                   | `ingest`                                                          | overwrite           |
-| `wiki/meta/*`     | Эмбеддинги, lint-state, snapshots, дашборды      | `bin/*`, `lint`, `gen_dashboards.py`                              | generated           |
+| `wiki/meta/vault-explorer.html` | Живой дашборд vault: метрики, time-series, карты, инсайты | `bin/update_dashboard.py` (Stop-hook), `bin/knowledge_map.py` (`/snapshot`) | generated (overwrite) |
+| `wiki/meta/snapshots/history.jsonl` | Append-only журнал метрик для time-series и pulse                | `bin/update_dashboard.py`                                         | append              |
+| `wiki/meta/snapshots/heavy.json` | Свежий sankey/treemap/инсайты для дашборда                       | `bin/knowledge_map.py` + ручная правка `/snapshot`                | overwrite           |
+| `wiki/meta/vendor/`             | Vendored Chart.js + плагины (зеркало `bin/vendor/`)              | `bin/update_dashboard.py::ensure_vendor()`                        | generated           |
+| `wiki/meta/*` (прочее)          | Эмбеддинги, lint-state, дашборды Bases                           | `bin/*`, `lint`, `gen_dashboards.py`                              | generated           |
 
 **Режимы:**
 - **read-only** — агент не пишет (источники, шаблоны, скрипты)

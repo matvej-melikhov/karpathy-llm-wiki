@@ -34,7 +34,7 @@ Pipeline parts:
 - compute_statistics: counts, connectivity, semantic structure
 - compute_graph_structure: Louvain communities + bridges + sparse clusters
 - wiki_graph.render_cytoscape_html: shared HTML renderer (preset / fcose)
-- render_artifact_page: combined markdown for wiki/meta/snapshots/
+- compute_sankey_data / compute_treemap_data: dashboard heavy.json
 
 Usage:
     python3 bin/knowledge_map.py                # both HTMLs + markdown
@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import re
 import sys
 from collections import Counter
@@ -578,275 +579,53 @@ def compute_graph_structure(
     }
 
 
+
 # ────────────────────────────────────────────────────────────────────────
-# Artifact markdown page
+# Dashboard data (sankey + treemap) for wiki/meta/snapshots/heavy.json
 # ────────────────────────────────────────────────────────────────────────
 
 
-def _render_graph_details(graph: dict[str, Any]) -> list[str]:
-    """Render Louvain detail tables (communities, bridges, sparse) inside
-    a single <details> block. The summary above the iframe table already
-    surfaces Q, the number of communities, and the top bridge — these
-    tables exist for users who want the full breakdown.
-    """
-    comms = graph.get("communities") or []
-    bridges = graph.get("bridges") or []
-    sparse = graph.get("sparse") or []
+def compute_sankey_data(
+    infos: list[PageInfo],
+    graph: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """domain × community flow — how many pages of each primary domain
+    landed in each Louvain community. Empty if topology unavailable."""
+    if graph is None:
+        return []
+    communities = graph.get("communities") or []
+    if not communities:
+        return []
+    # node → community index (only keep big communities, others dropped)
+    comm_of: dict[str, int] = {}
+    for ci, members in enumerate(communities):
+        for n in members:
+            comm_of[n] = ci
 
-    out: list[str] = [
-        "",
-        "<details>",
-        "<summary>Топология: сообщества, мосты, разреженные</summary>",
-        "",
-        f"- Сообществ всего: **{graph.get('all_communities_count', 0)}** "
-        f"(из них одиночек: {graph.get('singleton_communities', 0)})",
-        f"- Сообществ ≥ {_MIN_COMMUNITY_SIZE} страниц: **{len(comms)}**",
+    flow: dict[tuple[str, str], int] = {}
+    for info in infos:
+        if info.name not in comm_of:
+            continue
+        primary = info.domains[0] if info.domains else "без домена"
+        comm_label = f"Сообщество {comm_of[info.name] + 1}"
+        flow[(primary, comm_label)] = flow.get((primary, comm_label), 0) + 1
+    return [
+        {"from": d, "to": c, "flow": v}
+        for (d, c), v in sorted(flow.items(), key=lambda kv: -kv[1])
     ]
 
-    if comms:
-        out.extend([
-            "",
-            "**Сообщества (Louvain).** Группы страниц с плотными связями внутри.",
-            "",
-            "| # | Размер | Страницы |",
-            "|---:|---:|---|",
-        ])
-        for i, members in enumerate(comms, start=1):
-            preview = ", ".join(f"[[{m}]]" for m in members[:5])
-            if len(members) > 5:
-                preview += f", … (+{len(members) - 5})"
-            out.append(f"| {i} | {len(members)} | {preview} |")
 
-    out.extend(["", "**Узлы-мосты.** Wikilinks ведут сразу в несколько сообществ."])
-    if bridges:
-        out.extend([
-            "",
-            "| Страница | $P$ | Связей | Сообществ |",
-            "|---|---:|---:|---:|",
-        ])
-        for b in bridges:
-            out.append(
-                f"| [[{b['name']}]] | {b['participation']:.3f} | "
-                f"{b['degree']} | {b['spans']} |"
-            )
-    else:
-        out.append("")
-        out.append("_Нет страниц, связывающих два или более сообществ._")
-
-    out.extend([
-        "",
-        "**Разреженные сообщества.** Кластер собран Louvain, но внутри "
-        f"страницы почти не цитируют друг друга (порог $\\rho < "
-        f"{_SPARSE_COHESION_THRESHOLD}$, размер ≥ {_MIN_COMMUNITY_SIZE}).",
-    ])
-    if sparse:
-        out.extend([
-            "",
-            "| Размер | $\\rho$ | Внутренних рёбер | Страницы |",
-            "|---:|---:|---:|---|",
-        ])
-        for s in sparse:
-            preview = ", ".join(f"[[{m}]]" for m in s["members"][:6])
-            if len(s["members"]) > 6:
-                preview += f", … (+{len(s['members']) - 6})"
-            out.append(
-                f"| {s['size']} | {s['cohesion']:.3f} | "
-                f"{s['internal_edges']} | {preview} |"
-            )
-    else:
-        out.append("")
-        out.append("_Все сообщества достаточно плотные._")
-
-    out.extend(["", "</details>"])
-    return out
-
-
-def render_artifact_page(
-    stats: dict[str, Any],
-    html_filename: str,
-    generated_at: str,
-    iframe_src: str | None = None,
-    graph: dict[str, Any] | None = None,
-    graph_html_filename: str | None = None,
-    graph_iframe_src: str | None = None,
-) -> str:
-    """Render the wiki/meta/snapshots/snapshot-YYYY-MM-DD.md artifact.
-
-    Layout: headline metrics first (single table — what users come for),
-    then both interactive maps as iframes, then detail tables and prose
-    folded into <details> blocks. The first screen stays numbers-only.
-
-    iframe_src / graph_iframe_src are the URLs the iframes point to.
-    Caller should construct them as file:// URLs against the absolute path
-    of the generated HTML files; that scheme passes Obsidian's iframe
-    sandbox reliably.
-    """
-    total_pages = sum(stats["type_counts"].values())
-
-    # Default fallback if caller doesn't provide an explicit URL
-    if iframe_src is None:
-        iframe_src = f"app://obsidian.md/_attachments/{html_filename}"
-
-    lines: list[str] = [
-        "---",
-        "type: meta",
-        f"generated: {generated_at}",
-        f"pages_total: {total_pages}",
-        f"domains_count: {len(stats['domain_counts'])}",
-        "---",
-        "",
-        f"# Snapshot — {generated_at[:10]}",
-        "",
-        "## Метрики",
-        "",
-        "| Метрика | Значение |",
-        "|---|---:|",
-        f"| Страниц всего | **{total_pages}** |",
-        f"| Доменов | {len(stats['domain_counts'])} |",
-        f"| Без домена | {stats['unassigned']} |",
-        f"| Wikilinks (валидных) | {stats['valid_outlinks']} |",
-        f"| Страниц-сирот | {len(stats['orphans'])} |",
+def compute_treemap_data(infos: list[PageInfo]) -> list[dict[str, Any]]:
+    """domain × type counts — area of each rectangle in the treemap."""
+    counts: dict[tuple[str, str], int] = {}
+    for info in infos:
+        primary = info.domains[0] if info.domains else "без домена"
+        ptype = info.page_type or "—"
+        counts[(primary, ptype)] = counts.get((primary, ptype), 0) + 1
+    return [
+        {"domain": d, "type": t, "value": v}
+        for (d, t), v in sorted(counts.items(), key=lambda kv: (kv[0][0], -kv[1]))
     ]
-    if stats["most_connected"]:
-        top = stats["most_connected"][0]
-        lines.append(
-            f"| Самая связанная | [[{top['name']}]] ({top['inbound']} входящих) |"
-        )
-    if graph is not None:
-        Q = graph.get("modularity", 0.0)
-        comms = graph.get("communities") or []
-        lines.append(f"| Модулярность Q (Louvain) | {Q:.3f} |")
-        lines.append(
-            f"| Сообществ (≥ {_MIN_COMMUNITY_SIZE} страниц) | {len(comms)} |"
-        )
-        bridges = graph.get("bridges") or []
-        if bridges:
-            b = bridges[0]
-            lines.append(
-                f"| Топ-мост | [[{b['name']}]] "
-                f"(P={b['participation']:.2f}, {b['degree']} связей, "
-                f"{b['spans']} сообществ) |"
-            )
-    lines.append(f"| Медиана попарной близости | {stats['sim_median']:.3f} |")
-    lines.append(f"| 95-й перцентиль близости | {stats['sim_p95']:.3f} |")
-    if stats["tightest_pair"]:
-        a, b, s = stats["tightest_pair"]
-        lines.append(f"| Самая близкая пара | [[{a}]] ↔ [[{b}]] ({s:.3f}) |")
-    if stats["most_isolated"]:
-        n, m = stats["most_isolated"]
-        lines.append(f"| Самая изолированная | [[{n}]] (max близость {m:.3f}) |")
-
-    # ─── Maps ─────────────────────────────────────────────────────────
-    lines.extend([
-        "",
-        "## Карты",
-        "",
-        "**UMAP-проекция (семантика).** Близость на экране = семантическая "
-        "близость по эмбеддингам.",
-        "",
-        f'<iframe src="{iframe_src}" '
-        'style="width:100%; aspect-ratio: 4 / 3; border:1px solid #ccc; '
-        'border-radius:6px; display:block;"></iframe>',
-        "",
-        f"Если iframe не отобразился, открой `_attachments/{html_filename}` "
-        "в браузере.",
-    ])
-
-    if graph_iframe_src is not None:
-        lines.extend([
-            "",
-            "**Force-directed граф (топология).** Близость на экране = "
-            "плотность wikilink-связей. Облака — сообщества Louvain, "
-            "золотая обводка — узлы-мосты.",
-            "",
-            f'<iframe src="{graph_iframe_src}" '
-            'style="width:100%; aspect-ratio: 4 / 3; border:1px solid #ccc; '
-            'border-radius:6px; display:block;"></iframe>',
-        ])
-        if graph_html_filename:
-            lines.extend([
-                "",
-                f"Если iframe не отобразился, открой "
-                f"`_attachments/{graph_html_filename}` в браузере.",
-            ])
-
-    # ─── Domains breakdown (short, kept inline — usually 3–6 rows) ────
-    if stats["domain_counts"]:
-        lines.extend([
-            "",
-            "## Домены",
-            "",
-            "| Домен | Страниц | Avg internal cosine |",
-            "|---|---:|---:|",
-        ])
-        avg = stats.get("domain_avg_cosine") or {}
-        for d, n in sorted(stats["domain_counts"].items(), key=lambda x: -x[1]):
-            cosine_cell = f"{avg[d]:.3f}" if d in avg else "—"
-            lines.append(f"| [[{d}]] | {n} | {cosine_cell} |")
-
-    # ─── Topology details (Louvain) ───────────────────────────────────
-    if graph is not None:
-        lines.extend(_render_graph_details(graph))
-
-    # ─── Semantic distribution details ────────────────────────────────
-    lines.extend([
-        "",
-        "<details>",
-        "<summary>Распределение попарной близости (полное)</summary>",
-        "",
-        "| Метрика | Значение |",
-        "|---|---:|",
-        f"| Пар проанализировано | {stats['sim_count']} |",
-        f"| Медиана | {stats['sim_median']:.3f} |",
-        f"| 75-й перцентиль | {stats['sim_p75']:.3f} |",
-        f"| 95-й перцентиль | {stats['sim_p95']:.3f} |",
-        f"| Максимум | {stats['sim_max']:.3f} |",
-        "",
-        "</details>",
-    ])
-
-    # ─── How to read the maps ─────────────────────────────────────────
-    lines.extend([
-        "",
-        "<details>",
-        "<summary>Как читать карты и метрики</summary>",
-        "",
-        "**UMAP-карта.** Каждая точка — одна wiki-страница. Координаты — "
-        "двумерная UMAP-проекция эмбеддинга (4096-мерный вектор → 2D). "
-        "Чем ближе точки, тем семантически ближе страницы.",
-        "",
-        "- **Цвет** — первый домен в `domain:` страницы (по convention, "
-        "от частного к общему — первый самый специфичный). Серый — без домена.",
-        "- **Размер** — domain-хабы крупнее, остальные одинаковые. "
-        "Семантическая карта намеренно не кодирует число связей.",
-        "- **Линии** — wikilinks между страницами (полупрозрачные).",
-        "- **Hover** на узле подсвечивает 1-hop соседей.",
-        "",
-        "Когерентный кластер — много точек одного цвета рядом. Страница "
-        "оторвалась от своего цветового кластера — её эмбеддинг ушёл "
-        "в чужую семантическую область (сигнал для ingest или lint).",
-        "",
-        "**Force-directed граф.** Близость = плотность связей (fcose layout). "
-        "Цвет — primary domain. Размер — √(число связей). Золотая обводка — "
-        "узлы-мосты. Облака — сообщества Louvain.",
-        "",
-        "**Модулярность Q** — глобальная оценка качества разбиения на сообщества. "
-        "Типичный диапазон содержательных графов: 0.3–0.7. Q < 0.3 — структура "
-        "слабо выражена.",
-        "",
-        "**Participation coefficient P** (для мостов) — насколько wikilinks "
-        "страницы распределены между сообществами. P=0 — все ссылки в одном "
-        "сообществе, P≈1 — равномерно по нескольким. Высокий P + много связей = "
-        "страница, держащая на себе междисциплинарные нити vault.",
-        "",
-        "**Avg internal cosine** (в таблице доменов) — средняя попарная близость "
-        "страниц одного домена. >0.6 — плотный когерентный кластер. Низкое — "
-        "домен размазан по темам, возможно стоит разбить.",
-        "",
-        "</details>",
-    ])
-
-    return "\n".join(lines) + "\n"
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -999,42 +778,57 @@ def main() -> int:
         graph_html_path.write_text(graph_html, encoding="utf-8")
         print(f"wrote {graph_html_path}")
 
-    # 8. Statistics + artifact page
+    # 8. Heavy data for the live dashboard: sankey + treemap. Persisted
+    # to wiki/meta/snapshots/heavy.json, where bin/update_dashboard.py
+    # picks it up and injects into vault-explorer.html.
+    #
+    # Insights for the 4 maps are intentionally left empty here — the
+    # /snapshot skill prompts Claude Code to fill them in after reading
+    # this file plus the live metrics. We don't make a separate API call
+    # from Python because the agent is already on the line.
+    #
+    # The old per-day markdown wrapper (snapshot-YYYY-MM-DD.md) is no
+    # longer generated — the dashboard is the single point of entry.
     if not args.no_page:
-        stats = compute_statistics(infos_with_vecs)
-        generated_at = dt.datetime.now().isoformat(timespec="seconds")
-        # For local HTML embed, file:///<absolute-path> works reliably in
-        # Obsidian's iframe sandbox (no CSP restrictions). Path is machine-
-        # specific (encoded into markdown), but artifact pages are local-only
-        # auto-generated reports anyway. URL-encode special characters.
-        from urllib.parse import quote
-        abs_html = html_path.resolve()
-        # ?v=<timestamp> cache-buster — Obsidian / Electron caches local
-        # iframes aggressively, and without this the iframe sticks on the
-        # previous render even after the HTML file is regenerated.
-        cache_buster = dt.datetime.now().strftime("%Y%m%d%H%M%S")
-        iframe_src = f"file://{quote(str(abs_html))}?v={cache_buster}"
+        sankey_data = compute_sankey_data(infos_with_vecs, graph)
+        treemap_data = compute_treemap_data(infos_with_vecs)
 
-        graph_iframe_src: str | None = None
-        graph_html_filename: str | None = None
-        if graph_html_path is not None:
-            abs_graph_html = graph_html_path.resolve()
-            graph_iframe_src = (
-                f"file://{quote(str(abs_graph_html))}?v={cache_buster}"
-            )
-            graph_html_filename = graph_html_path.name
+        # Preserve any insights written by the agent on a previous /snapshot
+        # so re-running the heavy contour for fresh maps doesn't blow them
+        # away. The agent will overwrite them when it has new ones to write.
+        heavy_path = WIKI_ROOT / "meta" / "snapshots" / "heavy.json"
+        prev_insights: dict[str, str] = {}
+        if heavy_path.exists():
+            try:
+                prev = json.loads(heavy_path.read_text(encoding="utf-8"))
+                prev_insights = prev.get("insights") or {}
+            except json.JSONDecodeError:
+                pass
 
-        page_md = render_artifact_page(
-            stats, html_path.name, generated_at,
-            iframe_src=iframe_src, graph=graph,
-            graph_html_filename=graph_html_filename,
-            graph_iframe_src=graph_iframe_src,
+        heavy = {
+            "generated": dt.datetime.now().isoformat(timespec="seconds"),
+            "snapshot_date": today,
+            "umap_iframe": f"../../_attachments/{html_path.name}",
+            "graph_iframe": (
+                f"../../_attachments/{graph_html_path.name}"
+                if graph_html_path is not None else None
+            ),
+            "sankey": sankey_data,
+            "treemap": treemap_data,
+            "insights": prev_insights,   # filled by the /snapshot skill
+        }
+        heavy_path.parent.mkdir(parents=True, exist_ok=True)
+        heavy_path.write_text(json.dumps(heavy, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"wrote {heavy_path}")
+
+        # Refresh the dashboard so vault-explorer.html picks up the new
+        # heavy data immediately, without waiting for the next Stop-hook.
+        import subprocess
+        subprocess.run(
+            [sys.executable, str(Path(__file__).parent / "update_dashboard.py"),
+             "--trigger", "/snapshot"],
+            check=False,
         )
-        artifact_dir = WIKI_ROOT / "meta" / "snapshots"
-        artifact_dir.mkdir(parents=True, exist_ok=True)
-        artifact_path = artifact_dir / f"{base}.md"
-        artifact_path.write_text(page_md, encoding="utf-8")
-        print(f"wrote {artifact_path}")
 
     return 0
 

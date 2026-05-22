@@ -74,6 +74,12 @@
           },
           {
             "type": "command",
+            "command": "cd \"$PWD\"; [ -f bin/update_dashboard.py ] && python3 bin/update_dashboard.py >/dev/null 2>&1 || true",
+            "async": true,
+            "timeout": 60
+          },
+          {
+            "type": "command",
             "command": "afplay /System/Library/Sounds/Glass.aiff >/dev/null 2>&1 || true",
             "async": true,
             "timeout": 10

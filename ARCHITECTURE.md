@@ -45,7 +45,12 @@ Vault разделён на четыре слоя по жизненному ци
 | `wiki/meta/embeddings.json`                            | Эмбеддинги wiki-страниц.                                          | `bin/embed.py`                                                                  |
 | `wiki/meta/lint-reports/lint-state.json`               | Последнее состояние lint.                                         | `bin/static_lint.py`                                                            |
 | `wiki/meta/lint-reports/lint-report-YYYY-MM-DD.md`     | Человеко-читаемый отчёт о результатах lint.                       | `lint`                                                                          |
-| `wiki/meta/snapshots/snapshot-YYYY-MM-DD.md`           | Слепок vault: метрики связности и семантики + две карты.          | `bin/knowledge_map.py`                                                          |
+| `_attachments/snapshot-YYYY-MM-DD.html`                | Dated UMAP-карта (Cytoscape, preset-layout) на дату snapshot.     | `bin/knowledge_map.py` (`/snapshot`)                                            |
+| `_attachments/snapshot-graph-YYYY-MM-DD.html`          | Dated force-directed граф топологии (fcose-layout).               | `bin/knowledge_map.py` (`/snapshot`)                                            |
+| `wiki/meta/vault-explorer.html`                        | Живой дашборд vault: метрики, time-series, pulse, distributions, карты, инсайты. Единственная точка входа. | `bin/update_dashboard.py` (после каждого turn'а через Stop-hook)                |
+| `wiki/meta/snapshots/history.jsonl`                    | Append-only журнал метрик по turn'ам (delta + триггер).           | `bin/update_dashboard.py`                                                       |
+| `wiki/meta/snapshots/heavy.json`                       | Sankey + treemap данные + LLM-инсайты к 5 картам + пути к dated HTML. | `bin/knowledge_map.py` пишет данные, `/snapshot` skill пишет инсайты            |
+| `wiki/meta/vendor/*.js`                                | Vendored Chart.js + плагины (зеркало `bin/vendor/`).              | `bin/update_dashboard.py::ensure_vendor()`                                      |
 | `wiki/meta/dashboards/<Domain>.base`, `dashboard.base` | Obsidian Bases-файлы.                                             | `bin/gen_dashboards.py` (create-only); `obsidian-bases` (для нешаблонных Bases) |
 
 **Семантика:** все эти артефакты **derivable** — могут быть пересчитаны из контента. Их безопасно удалять.
@@ -64,7 +69,7 @@ Vault разделён на четыре слоя по жизненному ци
 | `study`          | через делегирование на `/save` — `wiki/{ideas,questions}/` с `provenance: study`, `wiki/{cache,log}.md` |
 | `query`          | `wiki/questions/` (опц.) через делегирование на save, обновляет `cache.md` после значимых ответов   |
 | `edge`           | read-only — только статистика на stdout                                                             |
-| `snapshot`       | `_attachments/snapshot-*.html`, `_attachments/snapshot-graph-*.html`, `wiki/meta/snapshots/snapshot-*.md` |
+| `snapshot`       | `_attachments/snapshot-*.html`, `_attachments/snapshot-graph-*.html`, `wiki/meta/snapshots/heavy.json` (sankey + treemap + insights); триггерит `bin/update_dashboard.py` для refresh `vault-explorer.html` |
 | `lint`           | `wiki/meta/lint-reports/lint-state.json` (+ опц. отчёт), content-файлы                              |
 | `help`           | read-only — справка по скиллам из `.claude/skills/*/SKILL.md`                                       |
 | `transcribe`     | `raw/<имя>.md` (транскрибация из `raw/formats/...`)                                                 |
@@ -77,14 +82,16 @@ Vault разделён на четыре слоя по жизненному ци
 | ------------------------------------ | ------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `bin/embed.py`                       | `wiki/meta/embeddings.json`                             | Обновляет эмбеддинги страниц.                                                     |
 | `bin/static_lint.py`                 | `wiki/meta/lint-reports/lint-state.json`                | Статические проверки и embedding-based lint wiki-страниц.                         |
-| `bin/knowledge_map.py`               | `wiki/meta/snapshots/snapshot-*.md`                     | Слепок vault: метрики + две карты (UMAP + force-graph).                           |
+| `bin/knowledge_map.py`               | `_attachments/snapshot-*.html`, `_attachments/snapshot-graph-*.html`, `wiki/meta/snapshots/heavy.json` | UMAP + force-graph + sankey/treemap данные. Тяжёлый контур, вызывается через `/snapshot` (раз в сутки). |
+| `bin/update_dashboard.py`            | `wiki/meta/vault-explorer.html`, `wiki/meta/snapshots/history.jsonl`, `wiki/meta/vendor/*.js` | Лёгкий контур: числовые метрики, distributions, pulse, time-series, word cloud, health score. ~1с на 60 страниц. |
 | `bin/transcribe.py`                  | `raw/<имя>.md`                                          | Конвертация бинарных источников.                                                  |
 | `bin/gen_dashboards.py`              | `wiki/meta/dashboards/*.base` (только если файла нет)   | Дефолтные дашборды по `wiki/domains/*.md` + глобальный `dashboard.base`.          |
 | `bin/gen_index.py`                   | `wiki/index.md` (полная перезапись)                     | Сборка `index.md` по `summary` во frontmatter страниц.                            |
 | `bin/rename_wiki_page.py`            | wiki-/raw-страница (rename/move) + все wikilinks на неё | Rename/move страницы с обновлением всех wikilinks.                                |
+| `bin/check_dashboard.py`             | — (read-only)                                           | Headless-проверка `vault-explorer.html` через Playwright. Dev-инструмент.         |
 | `bin/setup-vault.sh`, `bin/setup.sh` | initial scaffold                                        | Настройка vault и необходимого окружения. Однократно при создании инициализации.  |
 
-`embed.py`, `gen_index.py`, `gen_dashboards.py` запускаются автоматически Stop-hook'ом после каждого turn'а — скиллы их не вызывают.
+`embed.py`, `gen_index.py`, `gen_dashboards.py`, `update_dashboard.py` запускаются автоматически Stop-hook'ом после каждого turn'а — скиллы их не вызывают. `knowledge_map.py` — только через `/snapshot`.
 
 ---
 
