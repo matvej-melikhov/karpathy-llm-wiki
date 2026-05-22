@@ -4,7 +4,8 @@
 Recomputes all non-UMAP metrics (counts, wikilinks, Louvain communities,
 similarity percentiles, distributions, word cloud), appends or updates a
 record in history.jsonl, then rewrites wiki/meta/vault-explorer.html
-with the new data inline.
+with the new data inline. The HTML template supports light/dark themes
+(toggle in header, preference stored in localStorage).
 
 Heavy artifacts (UMAP, force-graph rendering, LLM insights, sankey/
 treemap data) are owned by bin/knowledge_map.py and run on a separate

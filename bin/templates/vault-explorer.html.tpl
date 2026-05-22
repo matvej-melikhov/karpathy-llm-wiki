@@ -4,10 +4,21 @@
   <meta charset="UTF-8">
   <title>Vault explorer v4</title>
   <script>
+(function () {
+  var k = "vault-explorer-theme";
+  var t = localStorage.getItem(k);
+  if (t !== "light" && t !== "dark") {
+    t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  }
+  document.documentElement.setAttribute("data-theme", t);
+})();
+  </script>
+  <script>
 {{VENDOR_JS}}
   </script>
   <style>
-    :root {
+    :root,
+    [data-theme="dark"] {
       --bg: #1e1e1e;
       --fg: #d4d4d4;
       --muted: #888;
@@ -18,6 +29,32 @@
       --warn: #ff8a4a;
       --bad: #ff5a5a;
       --good: #4ae87a;
+      --surface-inset: #111;
+      --code-bg: #333;
+      --link-hover: #79b8ff;
+      --insight-bg: rgba(74, 158, 255, 0.07);
+      --overlay: rgba(0, 0, 0, 0.2);
+      --overlay-strong: rgba(0, 0, 0, 0.3);
+      --shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+    [data-theme="light"] {
+      --bg: #f4f4f5;
+      --fg: #18181b;
+      --muted: #6b7280;
+      --card: #ffffff;
+      --card-2: #eef0f2;
+      --border: #d8dce0;
+      --accent: #2563eb;
+      --warn: #ea580c;
+      --bad: #dc2626;
+      --good: #16a34a;
+      --surface-inset: #eef0f2;
+      --code-bg: #e8eaed;
+      --link-hover: #1d4ed8;
+      --insight-bg: rgba(37, 99, 235, 0.08);
+      --overlay: rgba(0, 0, 0, 0.06);
+      --overlay-strong: rgba(0, 0, 0, 0.08);
+      --shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
     }
     * { box-sizing: border-box; }
     body {
@@ -28,8 +65,40 @@
       font-size: 14px;
     }
     header { padding: 18px 28px 16px; border-bottom: 1px solid var(--border); }
+    .header-inner {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
     h1 { margin: 0 0 4px; font-size: 22px; }
     .subtitle { color: var(--muted); font-size: 13px; }
+    .theme-toggle {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      margin-top: 2px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+      color: var(--fg);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .theme-toggle:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    [data-theme="dark"] .theme-icon-light { display: inline; }
+    [data-theme="dark"] .theme-icon-dark { display: none; }
+    [data-theme="light"] .theme-icon-light { display: none; }
+    [data-theme="light"] .theme-icon-dark { display: inline; }
 
     .one-line {
       padding: 10px 28px;
@@ -112,7 +181,7 @@
       width: 280px;
       z-index: 1000;
       border: 1px solid var(--border);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      box-shadow: var(--shadow);
       line-height: 1.5;
       text-align: left;
     }
@@ -238,14 +307,14 @@
       height: 380px;
       border: 1px solid var(--border);
       border-radius: 6px;
-      background: #111;
+      background: var(--surface-inset);
     }
     .map-canvas-wrapper {
       width: 100%;
       height: 380px;
       border: 1px solid var(--border);
       border-radius: 6px;
-      background: #111;
+      background: var(--surface-inset);
       padding: 10px;
       position: relative;
     }
@@ -256,7 +325,7 @@
       min-height: 380px;
       border: 1px solid var(--border);
       border-radius: 6px;
-      background: #111;
+      background: var(--surface-inset);
       padding: 24px 28px;
       display: flex;
       flex-wrap: wrap;
@@ -279,7 +348,7 @@
     }
 
     .map-insight {
-      background: rgba(74, 158, 255, 0.07);
+      background: var(--insight-bg);
       border-left: 3px solid var(--accent);
       padding: 10px 14px;
       margin-top: 12px;
@@ -321,7 +390,7 @@
     details.glossary dd { margin: 4px 0 0 0; color: var(--fg); font-size: 13px; line-height: 1.55; }
     details.glossary .formula {
       display: block;
-      background: rgba(0,0,0,0.3);
+      background: var(--overlay-strong);
       padding: 8px 12px;
       margin: 6px 0;
       border-radius: 4px;
@@ -336,7 +405,7 @@
       margin-top: 4px;
     }
 
-    code { background: #333; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+    code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
     .note { color: var(--muted); font-size: 12px; padding: 10px 14px; background: var(--card); border-left: 3px solid var(--accent); border-radius: 4px; margin-bottom: 18px; }
 
     /* Obsidian wikilink */
@@ -346,7 +415,7 @@
       border-bottom: 1px dotted var(--accent);
       transition: color 0.15s, border-color 0.15s;
     }
-    .obsidian-link:hover { color: #79b8ff; border-bottom-color: #79b8ff; }
+    .obsidian-link:hover { color: var(--link-hover); border-bottom-color: var(--link-hover); }
 
     /* Health score block */
     .health-block {
@@ -368,7 +437,7 @@
       gap: 4px;
       padding: 8px;
       border-radius: 8px;
-      background: rgba(0,0,0,0.2);
+      background: var(--overlay);
     }
     .health-score .value {
       font-size: 56px;
@@ -401,7 +470,7 @@
     .health-row .label { color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-size: 11px; }
     .health-row .bar {
       height: 8px;
-      background: rgba(0,0,0,0.3);
+      background: var(--overlay-strong);
       border-radius: 4px;
       overflow: hidden;
       position: relative;
@@ -445,8 +514,16 @@
 <body>
 
 <header>
-  <h1>Vault explorer</h1>
-  <div class="subtitle" id="header-subtitle"></div>
+  <div class="header-inner">
+    <div>
+      <h1>Vault explorer</h1>
+      <div class="subtitle" id="header-subtitle"></div>
+    </div>
+    <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Переключить тему" title="Переключить тему">
+      <span class="theme-icon theme-icon-light" aria-hidden="true">☀</span>
+      <span class="theme-icon theme-icon-dark" aria-hidden="true">☾</span>
+    </button>
+  </div>
 </header>
 
 <script id="dashboard-data" type="application/json">{{DATA_JSON}}</script>
@@ -981,23 +1058,68 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
 });
 
 // ════════════════════════════════════════════════════════════════════
+// Theme — localStorage + Chart.js resync
+// ════════════════════════════════════════════════════════════════════
+const THEME_STORAGE_KEY = "vault-explorer-theme";
+const chartInstances = [];
+
+function getTheme() {
+  return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+}
+
+function chartThemeTokens() {
+  const light = getTheme() === "light";
+  return light
+    ? { muted: "#6b7280", border: "#d8dce0", tooltipBg: "#ffffff", tooltipFg: "#18181b", tooltipBorder: "#d8dce0", treemapBorder: "#f4f4f5", treemapLabel: "#18181b" }
+    : { muted: "#888", border: "#3a3a3a", tooltipBg: "#333", tooltipFg: "#d4d4d4", tooltipBorder: "#4a4a4a", treemapBorder: "#1e1e1e", treemapLabel: "#1e1e1e" };
+}
+
+function applyChartTheme() {
+  const t = chartThemeTokens();
+  Chart.defaults.color = t.muted;
+  Chart.defaults.borderColor = t.border;
+  Object.assign(Chart.defaults.plugins.tooltip, {
+    backgroundColor: t.tooltipBg,
+    titleColor: t.tooltipFg,
+    bodyColor: t.tooltipFg,
+    borderColor: t.tooltipBorder,
+  });
+  chartInstances.forEach(chart => {
+    if (chart.config.type === "treemap" && chart.data.datasets[0]) {
+      chart.data.datasets[0].borderColor = t.treemapBorder;
+      chart.data.datasets[0].labels.color = t.treemapLabel;
+    }
+    chart.update("none");
+  });
+}
+
+function setTheme(theme) {
+  const next = theme === "light" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  localStorage.setItem(THEME_STORAGE_KEY, next);
+  applyChartTheme();
+}
+
+document.getElementById("theme-toggle").addEventListener("click", () => {
+  setTheme(getTheme() === "dark" ? "light" : "dark");
+});
+
+// ════════════════════════════════════════════════════════════════════
 // Charts — careful with defaults (don't overwrite plugin.tooltip)
 // ════════════════════════════════════════════════════════════════════
-Chart.defaults.color = "#888";
-Chart.defaults.borderColor = "#3a3a3a";
-// Set interaction mode globally — point-by-x indexing
 Chart.defaults.interaction.mode = "index";
 Chart.defaults.interaction.intersect = false;
-// Tooltip styling — assign individual fields, don't replace the object
 Object.assign(Chart.defaults.plugins.tooltip, {
-  backgroundColor: "#333",
-  titleColor: "#d4d4d4",
-  bodyColor: "#d4d4d4",
-  borderColor: "#4a4a4a",
   borderWidth: 1,
   padding: 10,
   cornerRadius: 6,
 });
+applyChartTheme();
+
+function registerChart(chart) {
+  chartInstances.push(chart);
+  return chart;
+}
 
 const palette = {
   // Page types
@@ -1096,27 +1218,27 @@ function filterHistoryByRange(range) {
   return history.filter(h => new Date(h.ts) >= cutoff);
 }
 
-// Distributions — no white border on doughnut (matches dark bg)
-new Chart(document.getElementById("dist-types"), {
+// Distributions — no border on doughnut (matches page bg)
+registerChart(new Chart(document.getElementById("dist-types"), {
   type: "doughnut",
   data: { labels: Object.keys(latest.types), datasets: [{ data: Object.values(latest.types), backgroundColor: colorsFor(Object.keys(latest.types)), borderWidth: 0 }] },
   options: { responsive: true, plugins: { legend: { position: "right", labels: { boxWidth: 10, font: { size: 11 } } } } },
-});
-new Chart(document.getElementById("dist-domains"), {
+}));
+registerChart(new Chart(document.getElementById("dist-domains"), {
   type: "bar",
   data: { labels: Object.keys(latest.domains), datasets: [{ data: Object.values(latest.domains), backgroundColor: colorsFor(Object.keys(latest.domains)), borderWidth: 0 }] },
   options: { responsive: true, plugins: { legend: { display: false } }, indexAxis: "y", scales: { x: { beginAtZero: true } } },
-});
-new Chart(document.getElementById("dist-provenance"), {
+}));
+registerChart(new Chart(document.getElementById("dist-provenance"), {
   type: "doughnut",
   data: { labels: Object.keys(provenance), datasets: [{ data: Object.values(provenance), backgroundColor: colorsFor(Object.keys(provenance)), borderWidth: 0 }] },
   options: { responsive: true, plugins: { legend: { position: "right", labels: { boxWidth: 10, font: { size: 11 } } } } },
-});
-new Chart(document.getElementById("dist-status"), {
+}));
+registerChart(new Chart(document.getElementById("dist-status"), {
   type: "bar",
   data: { labels: Object.keys(statuses), datasets: [{ data: Object.values(statuses), backgroundColor: colorsFor(Object.keys(statuses)), borderWidth: 0 }] },
   options: { responsive: true, plugins: { legend: { display: false } }, indexAxis: "y", scales: { x: { beginAtZero: true } } },
-});
+}));
 
 // Time-series — rendered through a single function so range-selector
 // can rebuild them on the fly.
@@ -1125,8 +1247,12 @@ function renderTimeseries(filtered) {
   const labels = filtered.map(h => h.ts.slice(5, 16));
 
   function build(id, config) {
-    if (tsCharts[id]) tsCharts[id].destroy();
-    tsCharts[id] = new Chart(document.getElementById(id), config);
+    if (tsCharts[id]) {
+      const idx = chartInstances.indexOf(tsCharts[id]);
+      if (idx >= 0) chartInstances.splice(idx, 1);
+      tsCharts[id].destroy();
+    }
+    tsCharts[id] = registerChart(new Chart(document.getElementById(id), config));
   }
 
   build("ts-pages-stack", {
@@ -1214,7 +1340,7 @@ if (sankeyData && sankeyData.length > 0) {
     [...new Set(sankeyData.map(d => d.from))].forEach((k, i) => { sankeyColor[k] = colorFor(k, i); });
     [...new Set(sankeyData.map(d => d.to))].forEach((k, i) => { sankeyColor[k] = colorFor(k, i + 4); });
 
-    new Chart(document.getElementById("map-sankey"), {
+    registerChart(new Chart(document.getElementById("map-sankey"), {
       type: "sankey",
       data: {
         datasets: [{
@@ -1232,7 +1358,7 @@ if (sankeyData && sankeyData.length > 0) {
         interaction: { mode: "nearest", intersect: true },
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.raw.from} → ${ctx.raw.to}: ${ctx.raw.flow} страниц` } } },
       },
-    });
+    }));
   } catch (e) {
     console.error("Sankey render failed", e);
     showPlaceholder("map-sankey", "Sankey не отрисовался");
@@ -1280,14 +1406,15 @@ linkifyWikilinks(".map-insight");
 
 if (treemapData && treemapData.length > 0) {
   try {
-    new Chart(document.getElementById("map-treemap"), {
+    const treemapTheme = chartThemeTokens();
+    registerChart(new Chart(document.getElementById("map-treemap"), {
       type: "treemap",
       data: {
         datasets: [{
           tree: treemapData,
           key: "value",
           groups: ["domain", "type"],
-          borderColor: "#1e1e1e",
+          borderColor: treemapTheme.treemapBorder,
           borderWidth: 2,
           spacing: 1,
           backgroundColor: ctx => {
@@ -1300,7 +1427,7 @@ if (treemapData && treemapData.length > 0) {
           },
           labels: {
             display: true,
-            color: "#1e1e1e",
+            color: treemapTheme.treemapLabel,
             font: { size: 11, weight: 500 },
             formatter: ctx => {
               const o = ctx.raw._data;
@@ -1319,7 +1446,7 @@ if (treemapData && treemapData.length > 0) {
         interaction: { mode: "nearest", intersect: true },
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => { const o = ctx.raw._data; return o ? `${o.domain} / ${o.type}: ${o.value} страниц` : ""; } } } },
       },
-    });
+    }));
   } catch (e) {
     console.error("Treemap render failed", e);
     showPlaceholder("map-treemap", "Treemap не отрисовался");
