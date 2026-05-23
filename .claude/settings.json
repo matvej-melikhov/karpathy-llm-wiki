@@ -56,6 +56,10 @@
           },
           {
             "type": "command",
+            "command": "cd \"$PWD\" && [ -d wiki ] && [ -d .git ] && git add wiki/ 2>/dev/null && git diff --cached --quiet || git commit -m \"chore(wiki): auto-snapshot $(date +%Y-%m-%dT%H:%M)\" 2>/dev/null || true"
+          },
+          {
+            "type": "command",
             "command": "cd \"$PWD\"; [ -f .env ] && { set -a; . ./.env; set +a; }; [ -f bin/embed.py ] && python3 bin/embed.py update >/dev/null 2>&1 || true",
             "async": true,
             "timeout": 600

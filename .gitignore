@@ -29,9 +29,19 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 
-# === ВКР рендеры (figures для диссертации) ===
+# === ВКР рендеры и иллюстрации ===
 /renders/
 /renders-png/
+/figures/
+
+# === ВКР отчёт ===
+/z_report/
+
+# === Бенчмарки (см. ветку benchmarking) ===
+/benchmarking/
+
+# === Тесты (см. ветку tests) ===
+/bin/tests/
 
 # === Per-user content: raw/ ===
 # Ignore everything inside raw/, but preserve .gitkeep scaffolding.

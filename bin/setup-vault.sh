@@ -98,5 +98,8 @@ cat > "${OBSIDIAN_DIR}/community-plugins.json" <<'EOF'
 []
 EOF
 
+# Удаляем .gitkeep-заглушки — папки уже созданы, они больше не нужны
+find "$VAULT_ROOT/wiki" "$VAULT_ROOT/raw" -name ".gitkeep" -delete 2>/dev/null || true
+
 echo "OK: vault настроен. Открывай папку $VAULT_ROOT в Obsidian:"
 echo "    Manage Vaults → Open folder as vault → выбери $VAULT_ROOT"
