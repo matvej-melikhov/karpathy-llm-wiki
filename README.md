@@ -55,31 +55,88 @@ Per-user контент (`raw/`, `wiki/`, `_attachments/`) исключён из
 
 ## Quick start
 
-Требуется [Claude Code](https://docs.anthropic.com/claude/docs/claude-code), Python 3.11+ и (опционально для url-ingest) Node.
+Требуется [Claude Code](https://docs.anthropic.com/claude/docs/claude-code) и Python 3.11+.
 
 ```bash
 git clone <repo> && cd llm-wiki
 
-bash bin/setup.sh           # python venv + dependencies
-bash bin/setup-vault.sh     # scaffold wiki/ + raw/ директорий
-npm install -g defuddle     # опционально: для /ingest <url>
+bash bin/setup.sh        # python-зависимости + defuddle (Node) + pandoc + whisper-cpp
+bash bin/setup-vault.sh  # Obsidian-конфиг (.obsidian/) + удаление .gitkeep-заглушек
 
-cp .env.example .env        # вписать ANTHROPIC_API_KEY и пр. для bin/embed.py
+cp .env.example .env     # embedding + транскрипция (опционально, см. ниже)
 
-claude                      # запустить агента в этой директории
+claude                   # запустить агента в этой директории
+```
+
+> **ANTHROPIC_API_KEY** не идёт в `.env` — им управляет Claude Code напрямую.  
+> Установи через `export ANTHROPIC_API_KEY=...` в shell или через `claude config`.
+
+### Embedding (опционально)
+
+Нужен только для `/lint --approx`. Без него всё остальное работает полностью. Выбери один провайдер и впиши значения в `.env`.
+
+**Вариант A — Ollama (локально, бесплатно, рекомендуется):**
+
+```bash
+brew install ollama && ollama serve &
+ollama pull nomic-embed-text
+```
+
+```env
+EMBED_PROVIDER=ollama
+EMBED_MODEL=nomic-embed-text
+EMBED_HOST=http://localhost:11434
+```
+
+**Вариант Б — LMStudio или другой OpenAI-compatible сервер:**
+
+```env
+EMBED_PROVIDER=openai
+EMBED_HOST=http://localhost:1234/v1
+EMBED_MODEL=<имя-модели>
+EMBED_API_KEY=
+```
+
+**Вариант В — OpenRouter (облако, платно):**
+
+```env
+EMBED_PROVIDER=openai
+EMBED_HOST=https://openrouter.ai/api/v1
+EMBED_MODEL=qwen/qwen3-embedding-8b
+EMBED_API_KEY=<openrouter-key>
+```
+
+Проверить подключение: `python3 bin/embed.py update`
+
+### Транскрипция (опционально)
+
+Нужна только для `/transcribe <audio-или-video>`. Скачай whisper-модель ([список](https://github.com/ggerganov/whisper.cpp#models)) и пропиши путь:
+
+```env
+WHISPER_MODEL=~/models/ggml-base.bin
+```
+
+### Первый запуск
+
+```bash
+# Положи источник
+echo "# RLHF\nReinforcement Learning from Human Feedback." > raw/test.md
+
+claude
 ```
 
 В сессии:
 
 ```
-> /ingest raw/моя-статья.md
-> /query что такое Bradley-Terry?
-> /brainstorm бустинг моделей
-> /edge
-> /lint
+/ingest raw/test.md     — синтезировать источник в wiki-страницы
+/query что такое RLHF?  — спросить по базе
+/edge                   — посмотреть фронтир (что стоит углубить)
+/lint                   — проверить связность wiki
+/snapshot               — собрать дашборд (UMAP, граф, sankey)
+/help                   — справка по любому скиллу
 ```
 
-Wiki полностью совместима с Obsidian — открывается в Obsidian как обычный vault и параллельно редактируется руками.
+Wiki совместима с Obsidian — открой папку как vault (`Manage Vaults → Open folder as vault`).
 
 ---
 
@@ -104,7 +161,9 @@ README.md
 ## Ветки
 
 - **`main`** — реализация под Claude Code (этот README).
-- **`opencode`** — альтернативная конфигурация под [opencode](https://opencode.ai/) CLI. Перенос skills и hooks в формат opencode; статус — early.
+- **`opencode`** — альтернативная конфигурация под [opencode](https://opencode.ai/) CLI. Статус — early.
+- **`benchmarking`** — скрипты и результаты замеров производительности (§4.4–4.5 ВКР).
+- **`tests`** — unit-тесты инфраструктурных скриптов (`bin/tests/`).
 
 ---
 
