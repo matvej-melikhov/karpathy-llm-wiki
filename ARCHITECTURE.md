@@ -89,7 +89,7 @@ Vault разделён на четыре слоя по жизненному ци
 | `bin/gen_index.py`                   | `wiki/index.md` (полная перезапись)                     | Сборка `index.md` по `summary` во frontmatter страниц.                            |
 | `bin/rename_wiki_page.py`            | wiki-/raw-страница (rename/move) + все wikilinks на неё | Rename/move страницы с обновлением всех wikilinks.                                |
 | `bin/check_dashboard.py`             | — (read-only)                                           | Headless-проверка `vault-explorer.html` через Playwright. Dev-инструмент.         |
-| `bin/setup-vault.sh`, `bin/setup.sh` | initial scaffold                                        | Настройка vault и необходимого окружения. Однократно при создании инициализации.  |
+| `bin/init.sh`                        | initial scaffold                                        | Интерактивный wizard: зависимости, `.env`, Obsidian-конфиг, переинициализация git. Однократно после клона. |
 
 `embed.py`, `gen_index.py`, `gen_dashboards.py`, `update_dashboard.py` запускаются автоматически Stop-hook'ом после каждого turn'а — скиллы их не вызывают. `knowledge_map.py` — только через `/snapshot`.
 

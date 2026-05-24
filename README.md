@@ -59,62 +59,25 @@ Per-user контент (`raw/`, `wiki/`, `_attachments/`) исключён из
 
 ```bash
 git clone <repo> && cd llm-wiki
-
-bash bin/setup.sh        # python-зависимости (req) + pandoc/whisper-cpp/defuddle (opt)
-bash bin/setup-vault.sh  # Obsidian-конфиг (.obsidian/) + удаление .gitkeep-заглушек
-
-cp .env.example .env     # embedding + транскрипция (опционально, см. ниже)
-
-claude                   # запустить агента в этой директории
+bash bin/init.sh         # интерактивный wizard: зависимости, .env, Obsidian, git
+claude                   # запустить агента
 ```
+
+Скрипт `init.sh` задаст вопросы по каждому опциональному компоненту (pandoc, whisper, defuddle, embedding-провайдер) и покажет все команды перед выполнением — никакой магии. В конце переинициализирует git под твой remote, чтобы ты сразу мог push'ить свою базу знаний.
 
 > **ANTHROPIC_API_KEY** не идёт в `.env` — им управляет Claude Code напрямую.  
-> Установи через `export ANTHROPIC_API_KEY=...` в shell или через `claude config`.
+> Установи через `export ANTHROPIC_API_KEY=...` или `claude config`.
 
-### Embedding (опционально)
+### Что настраивает `init.sh`
 
-Нужен только для `/lint --approx`. Без него всё остальное работает полностью. Выбери один провайдер и впиши значения в `.env`.
-
-**Вариант A — Ollama (локально, бесплатно, рекомендуется):**
-
-```bash
-brew install ollama && ollama serve &
-ollama pull frida
-```
-
-```env
-EMBED_PROVIDER=ollama
-EMBED_MODEL=frida
-EMBED_HOST=http://localhost:11434
-```
-
-**Вариант Б — LMStudio или другой OpenAI-compatible сервер:**
-
-```env
-EMBED_PROVIDER=openai
-EMBED_HOST=http://localhost:1234/v1
-EMBED_MODEL=<имя-модели>
-EMBED_API_KEY=
-```
-
-**Вариант В — OpenRouter (облако, платно):**
-
-```env
-EMBED_PROVIDER=openai
-EMBED_HOST=https://openrouter.ai/api/v1
-EMBED_MODEL=qwen/qwen3-embedding-8b
-EMBED_API_KEY=<openrouter-key>
-```
-
-Проверить подключение: `python3 bin/embed.py update`
-
-### Транскрипция (опционально)
-
-Нужна только для `/transcribe <audio-или-video>`. Скачай whisper-модель ([список](https://github.com/ggerganov/whisper.cpp#models)) и пропиши путь:
-
-```env
-WHISPER_MODEL=~/models/ggml-base.bin
-```
+| Шаг | Что делает |
+| --- | --- |
+| 1. Python deps | `pip install` обязательных зависимостей (pymupdf4llm, umap, networkx, tiktoken) |
+| 2. Системные деп. | pandoc / whisper-cpp / ffmpeg / defuddle — каждый Y/n |
+| 3. Embedding | Ollama (локально) / OpenAI-compatible / OpenRouter / пропустить — записывает `.env` |
+| 4. Whisper | Опциональная загрузка `ggml-base.bin` для `/transcribe` |
+| 5. Obsidian | Создаёт `.obsidian/` с настройками graph view и удаляет `.gitkeep` |
+| 6. Git | Переинициализирует репо под твой remote (стирает чужую историю шаблона) |
 
 ### Первый запуск
 

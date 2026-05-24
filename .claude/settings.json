@@ -10,7 +10,7 @@
       "Edit(/.claude/skills/defuddle/**)",
       "Edit(/.claude/skills/obsidian-bases/**)",
       "Edit(/.claude/skills/obsidian-markdown/**)",
-      "Bash(chmod +x bin/setup.sh)",
+      "Bash(chmod +x bin/init.sh)",
       "Bash(mkdir -p .claude/skills/transcribe/references)",
       "Edit(/.claude/skills/transcribe/**)",
       "Edit(/.claude/skills/snapshot/**)",
