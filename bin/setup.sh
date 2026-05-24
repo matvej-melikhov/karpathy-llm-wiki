@@ -1,83 +1,64 @@
 #!/usr/bin/env bash
-# Install all external dependencies for llm-wiki.
+# Install external dependencies for llm-wiki.
 #
-# Tested on macOS with Homebrew. For Linux, replace `brew install X` with your
-# package manager (`apt install X`, `dnf install X`, etc.).
+# Required:  Python 3.11+ (для всех скиллов и инфраструктуры)
+# Optional:  pandoc        (для /transcribe DOCX)
+#            whisper-cpp   (для /transcribe аудио/видео)
+#            ffmpeg        (для /transcribe видео)
+#            defuddle/Node (для /ingest <URL>)
+#
+# Tested on macOS with Homebrew. На Linux замени brew → apt/dnf/pacman.
 #
 # Run from project root:  bash bin/setup.sh
 
 set -e
 
-echo "==> Checking Node.js / npm..."
-if ! command -v npm >/dev/null 2>&1; then
-  echo "npm not found. Install Node.js first: https://nodejs.org or 'brew install node'"
+# ── Required: Python dependencies ──────────────────────────────────────────
+echo "==> Installing Python dependencies (required)..."
+if ! command -v pip3 >/dev/null 2>&1; then
+  echo "ERROR: pip3 не найден. Установи Python 3.11+ — https://python.org"
   exit 1
 fi
+pip3 install --user --break-system-packages -r bin/requirements.txt
+python3 -c "import pymupdf4llm; print('  pymupdf4llm OK')"
 
-echo "==> Installing defuddle (URL ingestion)..."
-npm install -g defuddle
-
-echo "==> Installing pandoc (DOCX transcription)..."
-if command -v brew >/dev/null 2>&1; then
+# ── Optional: pandoc (DOCX → markdown) ─────────────────────────────────────
+echo "==> Installing pandoc (для /transcribe DOCX)..."
+if command -v pandoc >/dev/null 2>&1; then
+  echo "  pandoc уже установлен"
+elif command -v brew >/dev/null 2>&1; then
   brew install pandoc
 elif command -v apt-get >/dev/null 2>&1; then
   sudo apt-get update && sudo apt-get install -y pandoc
 else
-  echo "Install pandoc manually for your OS: https://pandoc.org/installing.html"
+  echo "  WARN: pandoc не установлен. Поставь вручную: https://pandoc.org/installing.html"
 fi
 
-echo "==> Installing whisper-cpp + ffmpeg (audio/video transcription)..."
+# ── Optional: whisper-cpp + ffmpeg (audio/video → markdown) ────────────────
+echo "==> Installing whisper-cpp + ffmpeg (для /transcribe аудио/видео)..."
 if command -v brew >/dev/null 2>&1; then
   brew install whisper-cpp ffmpeg
 elif command -v apt-get >/dev/null 2>&1; then
   sudo apt-get install -y ffmpeg
-  echo "  note: install whisper.cpp manually — https://github.com/ggerganov/whisper.cpp"
+  echo "  WARN: whisper.cpp на Linux ставится вручную — https://github.com/ggerganov/whisper.cpp"
 else
-  echo "Install whisper-cpp and ffmpeg manually for your OS"
+  echo "  WARN: whisper-cpp и ffmpeg не установлены — see https://github.com/ggerganov/whisper.cpp"
 fi
 
-echo "  note: download a whisper model and set \$WHISPER_MODEL, e.g.:"
+echo "  скачай whisper-модель и пропиши путь в .env:"
 echo "    mkdir -p ~/models && curl -L -o ~/models/ggml-base.bin \\"
 echo "      https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"
-echo "    export WHISPER_MODEL=~/models/ggml-base.bin   # add to ~/.zshrc"
+echo "    echo 'WHISPER_MODEL=~/models/ggml-base.bin' >> .env"
 
-echo "==> Installing Python dependencies (PDF transcription)..."
-if command -v pip3 >/dev/null 2>&1; then
-  pip3 install --user --break-system-packages -r bin/requirements.txt
+# ── Optional: defuddle (URL ingestion via Node) ────────────────────────────
+echo "==> Installing defuddle (для /ingest <URL>)..."
+if command -v npm >/dev/null 2>&1; then
+  npm install -g defuddle && defuddle --version 2>/dev/null | sed 's/^/  defuddle: /' || true
 else
-  echo "pip3 not found. Install Python 3 first."
-  exit 1
+  echo "  SKIP: npm не найден. Если нужен ingest URL — поставь Node: https://nodejs.org"
 fi
 
 echo ""
-echo "==> Verification:"
-defuddle --version | sed 's/^/  defuddle: /'
-pandoc --version | head -1 | sed 's/^/  /'
-python3 -c "import pymupdf4llm; print('  pymupdf4llm: OK')"
-
-echo ""
-echo "==> Embedding service (optional, for lint --approx):"
-echo "  bin/embed.py supports two providers — choose ONE:"
-echo ""
-echo "  Option A: Ollama (default)"
-echo "    brew install ollama && ollama serve &"
-echo "    ollama pull <model>          # e.g. nomic-embed-text, frida"
-echo "    export EMBED_PROVIDER=ollama"
-echo "    export EMBED_MODEL=<model>"
-echo ""
-echo "  Option B: LMStudio (or any OpenAI-compatible server)"
-echo "    Download LMStudio, load embedding model, start local server."
-echo "    export EMBED_PROVIDER=openai"
-echo "    export EMBED_HOST=http://localhost:1234/v1"
-echo "    export EMBED_MODEL=<model>"
-echo ""
-echo "  Then: python3 bin/embed.py update"
-echo ""
-echo "Setup complete. Supported source formats:"
-echo "  - Markdown files (.md)       — direct read"
-echo "  - URLs (https://)            — defuddle"
-echo "  - PDF files (.pdf)           — bin/transcribe.py (pymupdf4llm)"
-echo "  - DOCX files (.docx)         — bin/transcribe.py (pandoc)"
-echo "  - Audio (.mp3/.wav/.m4a/...) — bin/transcribe.py (whisper-cpp)"
-echo "  - Video (.mp4/.mov/...)      — bin/transcribe.py (ffmpeg + whisper-cpp)"
-echo "  - Images (.png/.jpg/...)     — Claude reads natively"
+echo "==> Setup complete. Дальше:"
+echo "  bash bin/setup-vault.sh   # инициализировать vault"
+echo "  cp .env.example .env      # заполнить креды для embedding (см. README)"

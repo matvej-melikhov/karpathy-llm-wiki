@@ -58,6 +58,28 @@ WHISPER_MODEL_ENV = "WHISPER_MODEL"   # path to ggml model; falls back to defaul
 WHISPER_DEFAULT_LANG = "auto"         # whisper-cpp auto-detects language
 
 
+def _load_dotenv() -> None:
+    """Merge project-root .env into os.environ. No-op if file is missing."""
+    env_path = Path.cwd() / ".env"
+    if not env_path.is_file():
+        return
+    try:
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+    except OSError:
+        pass
+
+
+_load_dotenv()
+
+
 def _safe_stem(path: Path) -> str:
     """Filename stem safe for use as image prefix (no spaces/special chars)."""
     return re.sub(r"[^a-zA-Z0-9_\-]", "-", path.stem).strip("-")

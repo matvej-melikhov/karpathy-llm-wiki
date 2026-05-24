@@ -60,7 +60,7 @@ Per-user контент (`raw/`, `wiki/`, `_attachments/`) исключён из
 ```bash
 git clone <repo> && cd llm-wiki
 
-bash bin/setup.sh        # python-зависимости + defuddle (Node) + pandoc + whisper-cpp
+bash bin/setup.sh        # python-зависимости (req) + pandoc/whisper-cpp/defuddle (opt)
 bash bin/setup-vault.sh  # Obsidian-конфиг (.obsidian/) + удаление .gitkeep-заглушек
 
 cp .env.example .env     # embedding + транскрипция (опционально, см. ниже)
@@ -79,12 +79,12 @@ claude                   # запустить агента в этой дире�
 
 ```bash
 brew install ollama && ollama serve &
-ollama pull nomic-embed-text
+ollama pull frida
 ```
 
 ```env
 EMBED_PROVIDER=ollama
-EMBED_MODEL=nomic-embed-text
+EMBED_MODEL=frida
 EMBED_HOST=http://localhost:11434
 ```
 
@@ -120,7 +120,11 @@ WHISPER_MODEL=~/models/ggml-base.bin
 
 ```bash
 # Положи источник
-echo "# RLHF\nReinforcement Learning from Human Feedback." > raw/test.md
+cat > raw/test.md <<'EOF'
+# RLHF
+
+Reinforcement Learning from Human Feedback — обучение модели по предпочтениям человека.
+EOF
 
 claude
 ```
@@ -144,7 +148,6 @@ Wiki совместима с Obsidian — открой папку как vault (
 
 ```
 .claude/         # Claude Code: skills, agents, commands, settings, hooks
-.opencode/       # placeholder для альтернативной opencode CLI конфигурации
 _templates/      # frontmatter templates: idea / entity / domain / question / mind / meta
 assets/          # ассеты README (cover image)
 bin/             # генераторы (embed, gen_index, knowledge_map, lint, transcribe…)

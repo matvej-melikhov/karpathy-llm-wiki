@@ -3,7 +3,7 @@
 # (or run bin/setup.sh which does this for you)
 
 pymupdf4llm>=0.0.27   # PDF → raw markdown for bin/transcribe.py
-pytest>=8.0           # unit tests: python3 -m pytest bin/tests/
+pytest>=8.0           # unit tests (ветка tests: bin/tests/)
 umap-learn>=0.5       # UMAP projection for bin/knowledge_map.py
 networkx>=3.0         # Louvain communities + bridge/sparse analysis for bin/knowledge_map.py
 tiktoken>=0.7         # cl100k_base token approximation for benchmarking/ scripts
