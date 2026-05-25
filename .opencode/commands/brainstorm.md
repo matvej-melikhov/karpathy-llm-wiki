@@ -1,5 +1,4 @@
 ---
-name: brainstorm
 description: >
   Запускает brainstorm-сессию по заданной теме (или bridge-gap паре далёких
   страниц), модерирует поток тезисов пользователя через продвигающие вопросы
@@ -8,7 +7,7 @@ description: >
   страница в `wiki/minds/`. Реализация ножки Mind Mapping из гибридного
   фреймворка организации знаний. Триггеры: /brainstorm, "поразмышляем",
   "хочу подумать про X", "брейнсторм", "давай развей мысль".
-allowed-tools: Read Write Edit Glob Grep Bash
+agent: build
 ---
 
 # brainstorm: ассоциативное мышление в permanent notes
@@ -17,7 +16,7 @@ Brainstorm — это режим **создания узлов из процес
 
 **Главный принцип.** Содержание пишет пользователь, агент — модератор: задаёт продвигающие вопросы, ищет связи, склеивает финальный текст из реплик пользователя дословно. Агент **не предлагает** ассоциации и тезисы по теме — это инверсия Mind Mapping.
 
-**Стандарт синтаксиса:** wiki-страницы пишутся в Obsidian Flavored Markdown (wikilinks `[[...]]`, properties как YAML frontmatter). Детали — скилл `obsidian-markdown`.
+**Стандарт синтаксиса:** wiki-страницы пишутся в Obsidian Flavored Markdown (wikilinks `[[...]]`, properties как YAML frontmatter). Детали — subagent `@obsidian-markdown`.
 
 ---
 
@@ -57,7 +56,7 @@ python3 bin/embed.py query "<seed text>" -k 5
 
 ### Bridge-gap selection (только если seed не задан)
 
-Алгоритм — в [references/seed-strategies.md](references/seed-strategies.md). Резюме:
+Алгоритм — в `.opencode/references/brainstorm/seed-strategies.md`. Резюме:
 
 1. Загрузить `wiki/meta/embeddings.json`
 2. Найти топ-3 пар страниц с similarity ≥0.6, без wikilink в обе стороны
@@ -212,11 +211,11 @@ python3 bin/embed.py query "<seed text>" -k 5
    - `## Ключевые факты` — если новая mind важна поперёк wiki, добавь буллет, вытесни наименее актуальный.
    - `## Недавние изменения` — добавь строку сверху.
 
-   Формат и бюджет — `CLAUDE.md` раздел «Кэш контекста».
+   Формат и бюджет — `AGENTS.md` раздел «Кэш контекста».
 5. **НЕ запускать `/lint`** автоматически. Сессия одиночная — lint имеет смысл после серии. Пользователь может запросить вручную.
-6. **НЕ запускать `bin/embed.py` / `bin/gen_index.py` / `bin/gen_dashboards.py`** — это сделает Stop-хук в `.claude/settings.json` сам.
+6. **НЕ запускать `bin/embed.py` / `bin/gen_index.py` / `bin/gen_dashboards.py`** — это сделает session.idle-хук в `.opencode/plugins/wiki-hooks.ts` сам.
 
-После записи — короткое подтверждение: «Записал [[Имя mind]] и сессию в raw/brainstorm/. Ничего не запускал — Stop-хук обновит embeddings и index сам».
+После записи — короткое подтверждение: «Записал [[Имя mind]] и сессию в raw/brainstorm/. Ничего не запускал — session.idle-хук обновит embeddings и index сам».
 
 ---
 
@@ -290,6 +289,6 @@ python3 bin/embed.py query "<seed text>" -k 5
 - **Не вписывай в mind свои абзацы.** Crystallization — это редактура реплик пользователя, не написание текста. Если в репликах не сказано — в mind тоже не сказано.
 - **Не используй временных эвристик** («недавно», «давно», «сегодня»). Все эвристики — на семантической близости через эмбеддинги.
 - **Не запускай `/lint`** автоматически. Один brainstorm — слишком мало для full-audit.
-- **Не запускай `embed.py`/`gen_index.py`/`gen_dashboards.py`** руками — Stop-хук это делает.
+- **Не запускай `embed.py`/`gen_index.py`/`gen_dashboards.py`** руками — session.idle-хук это делает.
 - **Не нарушай минимум 2 related** в финальной mind. Если cross-link suggestion дал <2 подтверждённых — попроси пользователя добавить руками или предложи отложить запись (escape без mind).
 - **Не путай brainstorm с `/save`.** `save` фиксирует **уже сформулированную** мысль (одношагово). `brainstorm` — диалоговая сессия с probing'ом для **рождения** новой формулировки.

@@ -2,7 +2,7 @@
 
 Триггер: пользователь передаёт URL начинающийся с `https://`.
 
-**Зависимость:** `defuddle` (см. `.claude/skills/defuddle/SKILL.md`). Без него URL ingestion не работает. Если `which defuddle` пуст — попросить пользователя установить:
+**Зависимость:** `defuddle` (см. `.opencode/agents/defuddle.md`). Без него URL ingestion не работает. Если `which defuddle` пуст — попросить пользователя установить:
 
 ```bash
 npm install -g defuddle
@@ -21,7 +21,7 @@ npm install -g defuddle
 
 Если запись отсутствует — продолжать как новый источник.
 
-Полные детали manifest — `references/dedup.md`.
+Полные детали manifest — `.opencode/references/ingest/dedup.md`.
 
 ### 2. Извлечь slug из URL
 
@@ -67,7 +67,7 @@ defuddle сохраняет:
 
 ### 5. Synthesis Workflow
 
-Продолжать с Phase 1 (`references/synthesis-phases.md`) на сохранённом файле.
+Продолжать с Phase 1 (`.opencode/references/ingest/synthesis-phases.md`) на сохранённом файле.
 
 После Phase 8 запись в `raw/meta/ingested.json`:
 

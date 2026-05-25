@@ -2,7 +2,13 @@
 
 Obsidian-vault, управляемый агентом. Реализует паттерн LLM Wiki — постоянная, накапливающаяся база знаний.
 
-**Скиллы:** `/ingest`, `/query`, `/lint`, `/save`, `/brainstorm`, `/kn-map`, `/transcribe`, `/defuddle`, `/obsidian-bases`, `/obsidian-markdown`
+**Команды (slash):** `/ingest`, `/query`, `/lint`, `/save`, `/brainstorm`, `/kn-map`, `/transcribe`
+
+**Subagents (через `@`):** `@obsidian-markdown`, `@obsidian-bases`, `@defuddle`
+
+**Авто-хуки:** `.opencode/plugins/wiki-hooks.ts` — после каждого turn'а агента запускает обновление эмбеддингов (`bin/embed.py update`), индекса (`bin/gen_index.py`) и Bases-дашбордов (`bin/gen_dashboards.py`); при компакции и при наличии изменений в `wiki/` напоминает обновить `wiki/cache.md`.
+
+**Старт сессии:** прежде чем начать работу, прочитай `wiki/cache.md` — это саммари недавнего контекста, ~500 слов. Без объявления, молча, чтобы иметь контекст наготове.
 
 ## Структура wiki
 
@@ -20,7 +26,7 @@ Obsidian-vault, управляемый агентом. Реализует пат
 | `wiki/questions/` | Сохранённые ответы из `/save`, `/query`          | `save`, `query`                                                   | create + edit       |
 | `wiki/minds/`     | Мысли пользователя (через `/brainstorm`)         | `brainstorm`                                                      | create + edit       |
 | `wiki/index.md`   | Каталог всех страниц                             | `bin/gen_index.py`                                                | generated           |
-| `wiki/log.md`     | Журнал операций                                  | все скиллы                                                        | **append** (сверху) |
+| `wiki/log.md`     | Журнал операций                                  | все команды                                                       | **append** (сверху) |
 | `wiki/cache.md`   | Горячий кэш ~500 слов (актуальный контекст)      | `ingest`, `save`, `query`, `brainstorm`                           | **overwrite**       |
 | `wiki/summary.md` | Обзор vault (счётчики, статус)                   | `ingest`                                                          | overwrite           |
 | `wiki/meta/*`     | Эмбеддинги, lint-state, knowledge-maps, дашборды | `bin/*`, `lint`, `gen_dashboards.py`                              | generated           |

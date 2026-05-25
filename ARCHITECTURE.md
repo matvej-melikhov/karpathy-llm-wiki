@@ -52,20 +52,20 @@ Vault разделён на четыре слоя по жизненному ци
 
 ---
 
-## 2. Зоны ответственности скиллов
+## 2. Зоны ответственности команд и subagent'ов
 
-Это контракт — нарушение = баг скилла.
+Это контракт — нарушение = баг.
 
-| Скилл            | Пишет                                                                                               |
-| ---------------- | --------------------------------------------------------------------------------------------------- |
-| `ingest`         | `wiki/{ideas,entities,domains}/`, `wiki/{cache,log,summary}.md`, `_attachments/`                    |
-| `save`           | `wiki/questions/`, `wiki/{cache,log}.md`                                                            |
-| `brainstorm`     | `wiki/minds/`, `raw/brainstorm/<date>-<slug>.md`, `wiki/{cache,log}.md`                             |
-| `query`          | `wiki/questions/` (опц.)  через делегирование на save, обновляет `cache.md` после значимых ответов  |
-| `lint`           | `wiki/meta/lint-reports/lint-state.json` (+ опц. отчёт), content-файлы                              |
-| `transcribe`     | `raw/<имя>.md` (транскрибация из `raw/formats/...`)                                                 |
-| `obsidian-bases` | `wiki/meta/dashboards/*.base` (только нешаблонные / разовые правки)                                 |
-| `defuddle`       | возвращает markdown в stdout — фактическую запись в `raw/` делает пользователь или вызывающий скилл |
+| Команда / Subagent | Пишет                                                                                                |
+| ------------------ | ---------------------------------------------------------------------------------------------------- |
+| `/ingest`          | `wiki/{ideas,entities,domains}/`, `wiki/{cache,log,summary}.md`, `_attachments/`                     |
+| `/save`            | `wiki/questions/`, `wiki/{cache,log}.md`                                                             |
+| `/brainstorm`      | `wiki/minds/`, `raw/brainstorm/<date>-<slug>.md`, `wiki/{cache,log}.md`                              |
+| `/query`           | `wiki/questions/` (опц.) через делегирование на save, обновляет `cache.md` после значимых ответов    |
+| `/lint`            | `wiki/meta/lint-reports/lint-state.json` (+ опц. отчёт), content-файлы                               |
+| `/transcribe`      | `raw/<имя>.md` (транскрибация из `raw/formats/...`)                                                  |
+| `@obsidian-bases`  | `wiki/meta/dashboards/*.base` (только нешаблонные / разовые правки)                                  |
+| `@defuddle`        | возвращает markdown в stdout — фактическую запись в `raw/` делает пользователь или вызывающая команда |
 
 ## 3. Скрипты `bin/`
 
@@ -80,7 +80,7 @@ Vault разделён на четыре слоя по жизненному ци
 | `bin/rename_wiki_page.py`            | wiki-/raw-страница (rename/move) + все wikilinks на неё | Rename/move страницы с обновлением всех wikilinks.                                |
 | `bin/setup-vault.sh`, `bin/setup.sh` | initial scaffold                                        | Настройка vault и необходимого окружения. Однократно при создании инициализации.  |
 
-`embed.py`, `gen_index.py`, `gen_dashboards.py` запускаются автоматически Stop-hook'ом после каждого turn'а — скиллы их не вызывают.
+`embed.py`, `gen_index.py`, `gen_dashboards.py` запускаются автоматически session.idle-хуком (`.opencode/plugins/wiki-hooks.ts`) после каждого turn'а — команды их не вызывают.
 
 ---
 
@@ -93,4 +93,4 @@ Vault разделён на четыре слоя по жизненному ци
 3. `wiki/index.md` — ~1000-5000 токенов, полный каталог.
 4. Конкретные `wiki/ideas/<страница>.md` или `wiki/entities/<страница>.md` — 100-300 токенов каждая.
 
-Подробная инструкция для встраивания — в `CLAUDE.md`.
+Подробная инструкция для встраивания — в `AGENTS.md`.

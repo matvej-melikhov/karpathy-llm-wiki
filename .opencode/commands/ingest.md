@@ -1,6 +1,6 @@
 ---
-name: ingest
 description: "Загрузка источников в Obsidian wiki-vault. Читает источник, синтезирует знание в страницы ideas/ и entities/, проставляет перекрёстные ссылки, записывает провенанс. Поддерживает файлы, URL, изображения и пакетный режим. Триггеры: ingest, /ingest, обработай этот источник, добавь это в wiki, прочитай и зафайлируй, batch ingest, ingest этот url."
+agent: build
 ---
 
 # ingest: синтез источников в wiki
@@ -9,7 +9,7 @@ description: "Загрузка источников в Obsidian wiki-vault. Чи
 
 Один источник обычно затрагивает 5-15 wiki-страниц. Знание накапливается на одной странице из нескольких источников — это и есть compounding knowledge.
 
-**Стандарт синтаксиса:** пиши весь Obsidian Markdown в правильном Obsidian Flavored Markdown (wikilinks `[[Note]]`, embeds `![[file]]`, properties как YAML frontmatter). Детали — скилл `obsidian-markdown`.
+**Стандарт синтаксиса:** пиши весь Obsidian Markdown в правильном Obsidian Flavored Markdown (wikilinks `[[Note]]`, embeds `![[file]]`, properties как YAML frontmatter). Детали — subagent `@obsidian-markdown`.
 
 ---
 
@@ -30,9 +30,9 @@ description: "Загрузка источников в Obsidian wiki-vault. Чи
 
 | Источник | Что читать |
 |---|---|
-| **Markdown файл** (`raw/<path>.md`) | `references/dedup.md` (проверка hash) → Synthesis Workflow |
+| **Markdown файл** (`raw/<path>.md`) | `.opencode/references/ingest/dedup.md` (проверка hash) → Synthesis Workflow |
 | **PDF/DOCX** (`raw/formats/<file>` или `raw/<file>`) | сначала вызвать `/transcribe` → восстановленный `.md` в `raw/` → Synthesis Workflow |
-| **URL** (`https://...`) | `references/url-ingestion.md` (defuddle + URL-дедуп) → Synthesis Workflow |
+| **URL** (`https://...`) | `.opencode/references/ingest/url-ingestion.md` (defuddle + URL-дедуп) → Synthesis Workflow |
 | **Изображение** (`.png`/`.jpg`/`.jpeg`/`.gif`/`.webp`/`.svg`/`.avif`) | секция Image ingestion ниже → Synthesis Workflow |
 
 ---
@@ -52,10 +52,10 @@ description: "Загрузка источников в Obsidian wiki-vault. Чи
 | 7   | Domain proposal            | Если порог N=10 пройден тегом без domain — предложить создать                                                                                                           |
 | 8   | Lint review                | вызвать `/lint` — он сам запустит `bin/static_lint.py`, применит script auto-fixes и agent fixes, проведёт ask-dialogue с пользователем                                 |
 
-**Полные детали фаз 1-7:** `references/synthesis-phases.md`.
-**Полный pipeline Phase 8:** `.claude/skills/lint/SKILL.md` — ingest просто делегирует.
+**Полные детали фаз 1-7:** `.opencode/references/ingest/synthesis-phases.md`.
+**Полный pipeline Phase 8:** `.opencode/commands/lint.md` — ingest просто делегирует.
 
-После Phase 8 — записать запись в `raw/meta/ingested.json` (см. `references/dedup.md`).
+После Phase 8 — записать запись в `raw/meta/ingested.json` (см. `.opencode/references/ingest/dedup.md`).
 
 ---
 

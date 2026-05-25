@@ -5,7 +5,7 @@
 frontmatter каждой страницы, формирует таблицы по типам. Шапка зашита в
 скрипте. Полный index.md перезаписывается каждый запуск (idempotent).
 
-Запускается из Stop-hook'а в .claude/settings.json.
+Запускается из session.idle-хука в .opencode/plugins/wiki-hooks.ts.
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ updated: {date}
 База знаний. Заполняется через `/ingest`. Эта страница автоматически
 генерируется `bin/gen_index.py` из поля `summary:` во frontmatter каждой
 страницы. Не редактируй вручную — изменения затрутся при следующем
-Stop-hook'е.
+session.idle-хуке.
 
 ## Структура
 

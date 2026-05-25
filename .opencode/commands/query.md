@@ -1,7 +1,6 @@
 ---
-name: query
 description: "Ответ на вопросы из wiki-vault. Сначала читает cache, потом index, потом релевантные страницы. Синтезирует ответ с цитатами. Файлирует хорошие ответы обратно в wiki. Поддерживает quick, standard, deep режимы. Триггеры: /query, что ты знаешь о, объясни, найди в wiki, query quick:, query deep:."
-allowed-tools: Read Glob Grep
+agent: build
 ---
 
 # query: запросы к wiki
@@ -89,7 +88,7 @@ wc -w wiki/index.md
 - Вопрос про **структуру самой wiki** («сколько у меня страниц про X», «какие domains есть») — нужен index, не семантический поиск.
 - Вопрос **сравнительный** охватывающий несколько областей — embedding-pre-filter упустит широкий контекст. Используй `--deep`.
 
-**Свежесть эмбеддингов** — забота Stop-hook'а в `.claude/settings.json`, не запроса. Скилл просто читает `wiki/meta/embeddings.json` через `bin/embed.py query`. Если эмбеддер недоступен — fallback на классический поток (см. выше).
+**Свежесть эмбеддингов** — забота session.idle-хука в `.opencode/plugins/wiki-hooks.ts`, не запроса. Команда просто читает `wiki/meta/embeddings.json` через `bin/embed.py query`. Если эмбеддер недоступен — fallback на классический поток (см. выше).
 
 ---
 
@@ -205,7 +204,7 @@ wc -w wiki/index.md
 
 Хорошие ответы накапливают wiki. Не давай инсайтам исчезать в чат-истории.
 
-Делегируй на `/save` — он создаст `wiki/questions/<заголовок>.md` из шаблона с правильным frontmatter, обновит `log.md` и `cache.md`. Заполни `summary:` — `wiki/index.md` обновится автоматически на Stop-hook'е (не пиши в index руками).
+Делегируй на `/save` — он создаст `wiki/questions/<заголовок>.md` из шаблона с правильным frontmatter, обновит `log.md` и `cache.md`. Заполни `summary:` — `wiki/index.md` обновится автоматически на session.idle-хуке (не пиши в index руками).
 
 ---
 

@@ -51,7 +51,7 @@
      - Различается → продолжать ingest, перезаписав файл.
 4. Если записи нет — продолжать как новый источник.
 
-Детали URL-flow — `references/url-ingestion.md`.
+Детали URL-flow — `.opencode/references/ingest/url-ingestion.md`.
 
 ## Post-ingest запись
 

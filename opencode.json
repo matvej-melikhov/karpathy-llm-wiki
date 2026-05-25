@@ -1,0 +1,25 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openrouter/deepseek/deepseek-v4-flash",
+  "provider": {
+    "openrouter": {
+      "options": {
+        "apiKey": "{env:OPENROUTER_API_KEY}"
+      }
+    }
+  },
+  "default_agent": "build",
+  "instructions": ["AGENTS.md"],
+  "permission": {
+    "edit": {
+      "*": "allow",
+      "raw/formats/**": "deny",
+      "raw/meta/**": "deny",
+      "wiki/index.md": "deny",
+      "_templates/**": "deny"
+    },
+    "bash": "allow",
+    "webfetch": "allow"
+  },
+  "mcp": {}
+}

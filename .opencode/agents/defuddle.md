@@ -1,5 +1,4 @@
 ---
-name: defuddle
 description: >
   Очистить веб-страницу от мусора (nav, ads, sidebar, footer) и вернуть
   дословный текст статьи как чистый markdown. Сохраняет картинки (как
@@ -7,7 +6,7 @@ description: >
   единственный инструмент очистки.
   Триггеры: defuddle, clean this page, strip this url, fetch and clean,
   очисти страницу, выгрузи статью, читаемый markdown из URL.
-allowed-tools: Bash
+mode: subagent
 ---
 
 # defuddle: очистка веб-страниц
@@ -101,7 +100,7 @@ defuddle parse "${URL}" --json
 
 ## Интеграция с ingest
 
-Скилл `ingest` вызывает defuddle автоматически при URL ingestion. См. секцию "URL ingestion" в `.claude/skills/ingest/SKILL.md`.
+Команда `/ingest` вызывает defuddle автоматически при URL ingestion. См. секцию "URL ingestion" в `.opencode/commands/ingest.md`.
 
 Вручную скачать страницу и затем ingestить:
 

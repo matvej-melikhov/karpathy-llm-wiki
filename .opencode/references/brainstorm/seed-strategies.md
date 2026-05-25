@@ -1,6 +1,6 @@
 # Seed strategies
 
-Подробный алгоритм выбора seed для brainstorm-сессии. Подключается из основного [SKILL.md](../SKILL.md), раздел Pre-flight checks.
+Подробный алгоритм выбора seed для brainstorm-сессии. Подключается из основной команды `.opencode/commands/brainstorm.md`, раздел Pre-flight checks.
 
 ---
 
@@ -15,7 +15,7 @@
    ```bash
    python3 bin/embed.py query "<seed text>" -k 5
    ```
-3. Если в топ-5 есть `wiki/minds/...md` с similarity >0.7 — переход в **dedup dialog** (см. SKILL.md → Pre-flight checks → Dedup).
+3. Если в топ-5 есть `wiki/minds/...md` с similarity >0.7 — переход в **dedup dialog** (см. `.opencode/commands/brainstorm.md` → Pre-flight checks → Dedup).
 4. Иначе — стартуем сессию с заявленным seed.
 
 ---

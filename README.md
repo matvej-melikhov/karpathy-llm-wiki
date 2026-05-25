@@ -1,6 +1,6 @@
 # llm-wiki
 
-Реализация паттерна LLM Wiki от Андрея Карпаты в формате Claude Code плагина и Obsidian vault.
+Реализация паттерна LLM Wiki от Андрея Карпаты в формате [OpenCode](https://opencode.ai/) проекта и Obsidian vault.
 
 ## Идея
 
@@ -21,6 +21,17 @@ npm install -g defuddle
 ```
 
 Без него `/ingest <url>` не работает (для file-ingestion из `raw/` defuddle не нужен).
+
+## Запуск
+
+В корне проекта установить плагин-зависимости и запустить OpenCode:
+
+```bash
+cd .opencode && bun install && cd ..
+opencode
+```
+
+API-ключ к OpenRouter — в переменной окружения `OPENROUTER_API_KEY` (модель и провайдер настроены в `opencode.json`).
 
 ## Статус
 

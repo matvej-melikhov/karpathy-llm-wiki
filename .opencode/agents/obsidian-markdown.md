@@ -1,12 +1,11 @@
 ---
-name: obsidian-markdown
-description: "Корректный Obsidian Flavored Markdown: wikilinks, embeds, properties, теги, выделение, math, таблицы, mermaid. Ссылайся на этот скилл при создании или редактировании любой wiki-страницы. Триггеры: obsidian syntax, wikilink, embed, obsidian markdown, формат wikilink, обсидиан синтаксис."
-allowed-tools: Read Write Edit
+description: "Корректный Obsidian Flavored Markdown: wikilinks, embeds, properties, теги, выделение, math, таблицы, mermaid. Ссылайся на этот subagent при создании или редактировании любой wiki-страницы. Триггеры: obsidian syntax, wikilink, embed, obsidian markdown, формат wikilink, обсидиан синтаксис."
+mode: subagent
 ---
 
 # obsidian-markdown: Obsidian Flavored Markdown
 
-Ссылайся на этот скилл при написании любой wiki-страницы. Obsidian расширяет стандартный Markdown wikilinks, embeds и properties. Неправильный синтаксис ломает ссылки или frontmatter молча.
+Ссылайся на этот subagent при написании любой wiki-страницы. Obsidian расширяет стандартный Markdown wikilinks, embeds и properties. Неправильный синтаксис ломает ссылки или frontmatter молча.
 
 ---
 

@@ -1,5 +1,4 @@
 ---
-name: transcribe
 description: >
   Преобразует бинарные источники (PDF, DOCX) в качественный markdown.
   Двухшаговый pipeline: механическая конвертация через библиотеки (Step 1)
@@ -9,7 +8,7 @@ description: >
   бинарного источника.
   Триггеры: /transcribe, transcribe, convert pdf, преобразуй pdf, конвертируй документ,
   transcribe this file, обработай этот документ.
-allowed-tools: Read Write Edit Bash Glob
+agent: build
 ---
 
 # transcribe: конвертация бинарных источников в markdown
@@ -54,9 +53,9 @@ Step 2: агент пишет качественный markdown
 готов к /ingest когда понадобится.
 ```
 
-Детали каждого шага — в `references/`:
-- **`references/raw-pipeline.md`** — Step 1, форматы, изображения, именование, файловая структура
-- **`references/wiki-integration.md`** — frontmatter восстановленного .md, интеграция с ingest
+Детали каждого шага:
+- **`.opencode/references/transcribe/raw-pipeline.md`** — Step 1, форматы, изображения, именование, файловая структура
+- **`.opencode/references/transcribe/wiki-integration.md`** — frontmatter восстановленного .md, интеграция с ingest
 
 ---
 

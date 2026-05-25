@@ -1,6 +1,6 @@
 # Synthesis Workflow — фазы 1-7
 
-Восемь фаз всего. Phase 8 (lint review) — делегируется в `/lint`, см. `.claude/skills/lint/SKILL.md`.
+Восемь фаз всего. Phase 8 (lint review) — делегируется в `/lint`, см. `.opencode/commands/lint.md`.
 
 Никаких сокращений или импровизации последовательности — каждая фаза имеет свою цель.
 
@@ -107,12 +107,12 @@
 - `summary: '...'` — **обязательно для idea/entity/domain/question.** Одна строка ≤120 символов в одинарных кавычках (YAML-safe для `:`, `$`, `\`). Это то, что попадёт в `wiki/index.md` (генерируется автоматически). Пиши декларативно: «Что это и зачем», без отсылок к источнику. Примеры в существующих страницах.
 - `sources: ["[[raw/<file>]]"]` — провенанс на исходный файл (без расширения `.md`)
 - `related: [...]` — wikilinks на связанные idea/entity страницы из этого ingest
-- `tags: [...]` — тематические теги. Регистр — см. `CLAUDE.md` раздел Frontmatter.
+- `tags: [...]` — тематические теги. Регистр — см. `AGENTS.md` раздел Frontmatter.
 - `status: ...` — **строго одно из**: `evaluation`, `in-progress`, `ready`. Никаких `stable`, `draft`, `done`. Если страница только что создана и содержание не верифицировано — `evaluation`. Для `entity` поле `status` **не ставится** вообще.
 - `domain: [...]` — wikilinks на domain-страницы (`wiki/domains/`). **Convention: упорядочивать от частного к общему** — первый в списке считается primary classification (например, для PPO: `[Reinforcement Learning, Machine Learning]`). Это редакторское решение, lint не enforce'ит. Если страница пока без domain — `domain: []`
 - `updated: YYYY-MM-DD`
 
-Полная схема — `CLAUDE.md` раздел Frontmatter.
+Полная схема — `AGENTS.md` раздел Frontmatter.
 
 ### Inline в тексте
 
@@ -142,7 +142,7 @@
 
 ### `wiki/index.md`
 
-**Не редактируй вручную.** Файл генерируется автоматически из поля `summary:` во frontmatter каждой страницы скриптом `bin/gen_index.py` (запускается из Stop-hook'а). Твоя задача — заполнить корректное `summary:` во frontmatter созданной/обновлённой страницы (см. Phase 5). Index появится сам.
+**Не редактируй вручную.** Файл генерируется автоматически из поля `summary:` во frontmatter каждой страницы скриптом `bin/gen_index.py` (запускается из session.idle-хука). Твоя задача — заполнить корректное `summary:` во frontmatter созданной/обновлённой страницы (см. Phase 5). Index появится сам.
 
 Саммари должно передавать суть страницы (≤120 символов), чтобы агент в следующих сессиях мог принять решение о релевантности без открытия файла.
 При добавлении новой страницы — вставить строку в соответствующий раздел. При обновлении существующей (если суть содержательно сменилась) — обновить строку саммари.
@@ -162,7 +162,7 @@
 
 ### `wiki/cache.md`
 
-Перезаписать целиком с учётом нового ingest. Формат — в `CLAUDE.md` раздел «Кэш контекста».
+Перезаписать целиком с учётом нового ingest. Формат — в `AGENTS.md` раздел «Кэш контекста».
 
 ### `wiki/summary.md`
 
@@ -230,7 +230,7 @@
      - "[[Reinforcement Learning]]"   # узкий
      - "[[Machine Learning]]"          # широкий
    ```
-   Это редакторское решение, не enforced (см. `CLAUDE.md` раздел Frontmatter). При вставке нового домена ставь его в позицию по убыванию специфичности.
+   Это редакторское решение, не enforced (см. `AGENTS.md` раздел Frontmatter). При вставке нового домена ставь его в позицию по убыванию специфичности.
 4. Записать в `wiki/log.md` сверху:
    ```markdown
    ## YYYY-MM-DD — domain | <Title>
@@ -250,4 +250,4 @@
 
 ## После Phase 7
 
-Перейти к Phase 8 — Lint review. Полный pipeline (script auto-fixes + Layer 2 + agent fixes + ask-dialogue) делегируется скиллу `/lint`. Детали — `.claude/skills/lint/SKILL.md`.
+Перейти к Phase 8 — Lint review. Полный pipeline (script auto-fixes + Layer 2 + agent fixes + ask-dialogue) делегируется команде `/lint`. Детали — `.opencode/commands/lint.md`.
