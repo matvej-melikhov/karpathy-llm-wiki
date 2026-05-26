@@ -24,14 +24,20 @@ npm install -g defuddle
 
 ## Запуск
 
-В корне проекта установить плагин-зависимости и запустить OpenCode:
+Положи в `.env` в корне репо две переменные:
 
-```bash
-cd .opencode && bun install && cd ..
-opencode
+```
+OPENROUTER_API_KEY=sk-or-v1-...
+OPENCODE_MODEL=openrouter/deepseek/deepseek-v4-flash
 ```
 
-API-ключ к OpenRouter — в переменной окружения `OPENROUTER_API_KEY` (модель и провайдер настроены в `opencode.json`).
+Запусти через обёртку, которая подхватит `.env`:
+
+```bash
+bin/run-opencode.sh
+```
+
+Зависимости плагина (`@opencode-ai/plugin`) ставит сам OpenCode при первом запуске, по `.opencode/package.json`. Можно сменить модель на любую другую из `opencode models openrouter`.
 
 ## Статус
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "openrouter/deepseek/deepseek-v4-flash",
+  "model": "{env:OPENCODE_MODEL}",
   "provider": {
     "openrouter": {
       "options": {
