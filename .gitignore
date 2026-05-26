@@ -40,9 +40,6 @@ __pycache__/
 # === Бенчмарки (см. ветку benchmarking) ===
 /benchmarking/
 
-# === Тесты (см. ветку tests) ===
-/bin/tests/
-
 # === Per-user content: raw/ ===
 # Ignore everything inside raw/, but preserve .gitkeep scaffolding.
 /raw/*
