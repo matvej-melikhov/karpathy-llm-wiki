@@ -24,20 +24,17 @@ npm install -g defuddle
 
 ## Запуск
 
-Положи в `.env` в корне репо две переменные:
-
-```
-OPENROUTER_API_KEY=sk-or-v1-...
-OPENCODE_MODEL=openrouter/deepseek/deepseek-v4-flash
-```
-
-Запусти через обёртку, которая подхватит `.env`:
+Один раз залогинься в провайдер (ключ сохранится в `~/.local/share/opencode/auth.json`):
 
 ```bash
-bin/run-opencode.sh
+opencode providers login openrouter
 ```
 
-Зависимости плагина (`@opencode-ai/plugin`) ставит сам OpenCode при первом запуске, по `.opencode/package.json`. Можно сменить модель на любую другую из `opencode models openrouter`.
+Дальше — просто `opencode` в корне репо. Модель и конфиг подхватываются из `opencode.json`.
+
+Сменить модель: правка `model` в `opencode.json` или флаг `opencode -m openrouter/<provider>/<model>`. Список — `opencode models openrouter`.
+
+Для `bin/embed.py` (эмбеддинги, отдельный пайплайн) ключ читается из `.env` в корне (переменные `EMBED_API_KEY`, `EMBED_HOST`, `EMBED_MODEL`).
 
 ## Статус
 
