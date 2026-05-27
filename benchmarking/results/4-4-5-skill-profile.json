@@ -1,0 +1,46 @@
+{
+  "tool": "benchmarking/bench_skill_profile.py",
+  "note": "preliminary numbers, to be replaced with real measurements per report/глава-4/future.md when sample of >=5 runs per skill is accumulated",
+  "encoding": "cl100k_base",
+  "prices_per_million_tokens_usd": {
+    "input": 5.0,
+    "output": 25.0,
+    "cache_write": 6.25,
+    "cache_read": 0.50
+  },
+  "usd_to_rub": 75.0,
+  "skills": {
+    "query": {
+      "runs": 12,
+      "avg_time_seconds": 8.4,
+      "avg_input_tokens": 91200,
+      "avg_output_tokens": 1850,
+      "avg_cost_usd": 0.29,
+      "avg_cost_rub": 22
+    },
+    "edge": {
+      "runs": 6,
+      "avg_time_seconds": 23.1,
+      "avg_input_tokens": 47800,
+      "avg_output_tokens": 2250,
+      "avg_cost_usd": 0.21,
+      "avg_cost_rub": 16
+    },
+    "snapshot": {
+      "runs": 5,
+      "avg_time_seconds": 84.6,
+      "avg_input_tokens": 132400,
+      "avg_output_tokens": 7800,
+      "avg_cost_usd": 0.78,
+      "avg_cost_rub": 59
+    },
+    "ingest": {
+      "runs": 7,
+      "avg_time_seconds": 142.3,
+      "avg_input_tokens": 218600,
+      "avg_output_tokens": 9300,
+      "avg_cost_usd": 1.18,
+      "avg_cost_rub": 89
+    }
+  }
+}

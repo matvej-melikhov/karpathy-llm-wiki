@@ -1,0 +1,72 @@
+{
+  "tool": "benchmarking/bench_query.py",
+  "top_k": 5,
+  "queries_file": "benchmarking/queries.txt",
+  "baseline": {
+    "index_md_tokens": 4127,
+    "content_pages_count": 71,
+    "mean_page_tokens": 1020,
+    "all_content_pages_tokens": 72414,
+    "fallback_pages": 5,
+    "fallback_tokens": 9227
+  },
+  "per_query": [
+    {
+      "query": "что такое PPO",
+      "top_k": 5,
+      "paths": [
+        "wiki/ideas/PPO.md",
+        "wiki/ideas/RLHF.md"
+      ],
+      "paths_found": 2,
+      "prefilter_seconds": 0.9457206659717485,
+      "topk_tokens": 2987
+    },
+    {
+      "query": "как RLHF использует Bradley-Terry",
+      "top_k": 5,
+      "paths": [
+        "wiki/ideas/RLHF.md"
+      ],
+      "paths_found": 1,
+      "prefilter_seconds": 0.8969492499600165,
+      "topk_tokens": 1676
+    },
+    {
+      "query": "в чём разница LambdaRank и LambdaMART",
+      "top_k": 5,
+      "paths": [
+        "wiki/ideas/LambdaMART.md",
+        "wiki/ideas/LambdaRank.md",
+        "wiki/ideas/Ranking.md"
+      ],
+      "paths_found": 3,
+      "prefilter_seconds": 1.2541304159676656,
+      "topk_tokens": 4349
+    },
+    {
+      "query": "как устроен бустинг",
+      "top_k": 5,
+      "paths": [
+        "wiki/ideas/Boosting.md",
+        "wiki/entities/CatBoost.md",
+        "wiki/ideas/LambdaMART.md"
+      ],
+      "paths_found": 3,
+      "prefilter_seconds": 0.9056945000193082,
+      "topk_tokens": 3181
+    },
+    {
+      "query": "что такое Reward Hacking",
+      "top_k": 5,
+      "paths": [
+        "wiki/ideas/RLHF.md"
+      ],
+      "paths_found": 1,
+      "prefilter_seconds": 1.1517206249991432,
+      "topk_tokens": 1676
+    }
+  ],
+  "median_prefilter_seconds": 0.9457206659717485,
+  "median_topk_tokens": 2987
+}

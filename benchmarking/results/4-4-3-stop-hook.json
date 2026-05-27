@@ -1,0 +1,88 @@
+{
+  "tool": "benchmarking/bench_stop_hook.py",
+  "encoding": "cl100k_base",
+  "runs_per_script": 3,
+  "scripts": [
+    {
+      "name": "embed.py update",
+      "command": [
+        "python3",
+        "bin/embed.py",
+        "update"
+      ],
+      "runs_seconds": [
+        0.3098625829879893,
+        0.30689754101331346,
+        0.3025607500021579
+      ],
+      "median_seconds": 0.30689754101331346,
+      "min_seconds": 0.3025607500021579,
+      "max_seconds": 0.3098625829879893,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "notes": "incremental: only changed pages; no LLM alternative (separate embedding model)"
+    },
+    {
+      "name": "gen_index.py",
+      "command": [
+        "python3",
+        "bin/gen_index.py"
+      ],
+      "runs_seconds": [
+        0.027802416996564716,
+        0.027549999998882413,
+        0.02715845800412353
+      ],
+      "median_seconds": 0.027549999998882413,
+      "min_seconds": 0.02715845800412353,
+      "max_seconds": 0.027802416996564716,
+      "input_tokens": 11582,
+      "output_tokens": 3541,
+      "notes": "reads frontmatter of 66 pages, writes index.md"
+    },
+    {
+      "name": "gen_dashboards.py",
+      "command": [
+        "python3",
+        "bin/gen_dashboards.py"
+      ],
+      "runs_seconds": [
+        0.026589625005726703,
+        0.024993833008920774,
+        0.025710542002343573
+      ],
+      "median_seconds": 0.025710542002343573,
+      "min_seconds": 0.024993833008920774,
+      "max_seconds": 0.026589625005726703,
+      "input_tokens": 2297,
+      "output_tokens": 927,
+      "notes": "reads domain pages, writes per-domain .base files + global dashboard.base"
+    },
+    {
+      "name": "update_dashboard.py",
+      "command": [
+        "python3",
+        "bin/update_dashboard.py"
+      ],
+      "runs_seconds": [
+        2.4077822909894167,
+        2.342851666006027,
+        2.3470362500083866
+      ],
+      "median_seconds": 2.3470362500083866,
+      "min_seconds": 2.342851666006027,
+      "max_seconds": 2.4077822909894167,
+      "input_tokens": 73208,
+      "output_tokens": 102028,
+      "notes": "reads 66 wiki pages + embeddings, writes vault-explorer.html (incl. inline JSON)"
+    }
+  ],
+  "total_median_seconds": 2.707194333022926,
+  "llm_alternative": {
+    "input_tokens_per_turn": 87087,
+    "output_tokens_per_turn": 106496,
+    "usd_per_turn": 3.0978,
+    "usd_per_typical_session": 46.47,
+    "turns_per_typical_session": 15
+  }
+}

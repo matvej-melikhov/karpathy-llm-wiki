@@ -37,9 +37,6 @@ __pycache__/
 # === ВКР отчёт ===
 /z_report/
 
-# === Бенчмарки (см. ветку benchmarking) ===
-/benchmarking/
-
 # === Тесты (см. ветку tests) ===
 /bin/tests/
 

@@ -1,0 +1,48 @@
+{
+  "tool": "benchmarking/bench_lint.py",
+  "runs": [
+    2.9513366669998504,
+    2.9839248749776743,
+    2.950989375007339
+  ],
+  "median_seconds": 2.9513366669998504,
+  "files_checked": 75,
+  "issues_by_layer": {
+    "layer1": {
+      "asymmetric-related": 65
+    },
+    "layer15": {
+      "similar-but-unlinked": 3,
+      "synthesis-drift": 6
+    },
+    "layer2": {},
+    "unknown": {}
+  },
+  "totals": {
+    "layer1": 65,
+    "layer15": 9,
+    "unknown": 0
+  },
+  "layer2_types_documentation": [
+    "contradiction",
+    "domain-order",
+    "missing-concept",
+    "outdated-claim",
+    "tag-casing"
+  ],
+  "layer2_cost_estimates": {
+    "with_layer15_prefilter": {
+      "pairs": 3,
+      "input_tokens": 6119,
+      "output_tokens": 600
+    },
+    "without_layer15_batch": {
+      "pages": 71,
+      "input_tokens": 72414,
+      "output_tokens": 600
+    },
+    "speedup_factor": 11.834286648145122
+  },
+  "content_pages": 71,
+  "total_content_tokens": 72414
+}

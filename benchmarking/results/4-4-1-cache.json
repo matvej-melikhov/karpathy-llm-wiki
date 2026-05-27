@@ -1,0 +1,14 @@
+{
+  "cache_path": "wiki/cache.md",
+  "cache_chars": 2450,
+  "cache_tokens": 980,
+  "encoding": "cl100k_base",
+  "fallback_log_tokens": 4346,
+  "fallback_index_tokens": 4127,
+  "fallback_pages_tokens": 5100,
+  "fallback_total_tokens": 13573,
+  "mean_page_tokens": 1020,
+  "fallback_pages": 5,
+  "tokens_saved_per_session": 12593,
+  "ratio_fallback_to_cache": 13.85
+}
