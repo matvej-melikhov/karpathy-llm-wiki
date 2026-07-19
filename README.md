@@ -1,135 +1,175 @@
+# llm-wiki
+
 <p align="center">
-  <img src="./assets/cover.svg" alt="llm-wiki — a persistent, agent-managed knowledge base" width="100%"/>
+  <img src="./assets/banner.svg" alt="llm-wiki — персональная база знаний под управлением ИИ-агента" width="100%"/>
 </p>
 
-# llm-wiki — opencode edition
+<p align="center">
+  <img src="https://img.shields.io/badge/Claude%20Code-agent-d97757" alt="Claude Code"/>
+  <img src="https://img.shields.io/badge/Python-3.11+-3776ab" alt="Python 3.11+"/>
+  <img src="https://img.shields.io/badge/Obsidian-vault-7c3aed" alt="Obsidian"/>
+  <img src="https://img.shields.io/badge/tests-373%20passed-2ea44f" alt="tests"/>
+  <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT"/>
+</p>
 
-Реализация паттерна **LLM Wiki** ([Andrej Karpathy](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)) поверх Obsidian-vault, управляемая через [OpenCode](https://opencode.ai/) CLI.
+**llm-wiki** — программная реализация паттерна [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f), предложенного Андреем Карпаты. Вместо классического RAG, который заново читает сырые документы при каждом запросе, ИИ-агент **однократно компилирует** источники в постоянную wiki из связанных markdown-страниц — и дальше сам её ведёт: создаёт страницы, проставляет перекрёстные ссылки, следит за целостностью. Пользователь работает с готовой базой через привычный Obsidian.
 
-> Альтернативная реализация: тот же паттерн, что и на ветке `main` (Claude Code), но через провайдер-нейтральный opencode. Модель выбирается в `opencode.json`, по умолчанию — `openrouter/z-ai/glm-4.5-air`.
+Проект выполнен в рамках выпускной квалификационной работы (СПбГЭТУ «ЛЭТИ», 2026) и доводит концептуальное описание паттерна до практического инструмента.
 
-> Вместо того чтобы каждый раз заново читать сырые документы (классический RAG), LLM строит и поддерживает структурированную базу знаний — wiki из markdown-страниц с перекрёстными ссылками. С каждым источником wiki становится богаче. При запросе агент не пересинтезирует знание из чанков — он читает уже готовые страницы, где синтез был выполнен один раз при ingestion.
+## Ключевые результаты
 
----
+- **Агент — менеджер базы, а не ассистент.** Синтез страниц, связывание, аудит целостности и навигационные хабы поддерживаются автоматически; в существующих инструментах (Notion AI, Evernote AI, плагины Obsidian) эта работа остаётся ручной.
+- **Экономия контекста в 1,8–13,8×** по входным токенам относительно наивных LLM-альтернатив — за счёт горячего кэша контекста, гибридного поиска с векторной предфильтрацией и детерминированной регенерации артефактов (замеры — в ветке [`benchmarking`](../../tree/benchmarking)).
+- **Источники любых форматов**: PDF, DOCX, веб-страницы, аудио, видео, изображения — единый конвейер приведения к markdown.
+- **Многослойный аудит базы**: 20 типов проверок в трёх слоях — статические правила, эмбеддинг-аномалии, смысловые LLM-проверки.
+- **Полная обратимость**: каждый ход агента фиксируется git-коммитом, данные — локальные markdown-файлы.
+- **373 unit-теста** инфраструктурных скриптов (ветка [`tests`](../../tree/tests)).
 
-## Что внутри
+## Возможности
 
-| Слой | Что хранится | Кто пишет |
+| Скилл | Команда | Что делает |
 | --- | --- | --- |
-| `raw/` | Источники: md, pdf, docx, видео-транскрипты, URL-снимки. Иммутабельно. | пользователь, `/transcribe` |
-| `wiki/ideas/` | Концепции, механизмы, теории | `/ingest`, `/save` |
-| `wiki/entities/` | Люди, организации, статьи, библиотеки, модели | `/ingest` |
-| `wiki/domains/` | Навигационные хабы по областям (MOC), порог N=10 | `/ingest` |
-| `wiki/questions/` | Сохранённые ответы из чата | `/save`, `/query` |
-| `wiki/minds/` | Авторские мысли, склеенные из brainstorm-сессий | `/brainstorm` |
-| `wiki/meta/` | Эмбеддинги, lint-state, knowledge-maps, дашборды — derivable | `bin/*`, `/lint`, `/kn-map` |
-| `wiki/{cache,log,index,summary}.md` | Горячий контекст, журнал, каталог, обзор | команды + `bin/gen_index.py` |
+| **ingest** | `/ingest` | Читает источник из `raw/` или URL, синтезирует связанные страницы wiki |
+| **query** | `/query` | Отвечает на вопрос строго по базе с цитированием страниц |
+| **study** | `/study` | Учебный диалог на знаниях модели и веб-поиске, с файлированием в wiki |
+| **brainstorm** | `/brainstorm` | Модерирует мозговой штурм и склеивает мысль пользователя в permanent note |
+| **edge** | `/edge` | Показывает границу базы знаний и подсказывает направления роста |
+| **lint** | `/lint` | Трёхслойный аудит целостности с автопочинкой |
+| **snapshot** | `/snapshot` | Тяжёлая аналитика: карта знаний (UMAP), граф связей, sankey, treemap, LLM-инсайты |
+| **transcribe** | `/transcribe` | Конвертация PDF/DOCX/аудио/видео в markdown-источник |
+| **save** | `/save` | Сохраняет ответ или инсайт из чата как страницу wiki |
+| **help** | `/help` | Справка по всем скиллам |
 
-Per-user контент (`raw/`, `wiki/`, `_attachments/`) исключён из репозитория. Коммитится только инфраструктура.
+Помимо скиллов, после каждого хода агента хуки автоматически обновляют эмбеддинги, мастер-индекс, живой дашборд `vault-explorer.html` и коммитят изменения в git — без расхода токенов.
 
-Полный design-doc — [`ARCHITECTURE.md`](./ARCHITECTURE.md). Схема страниц и frontmatter — [`AGENTS.md`](./AGENTS.md).
+## Архитектура
 
----
+Vault устроен как четыре слоя с явным контрактом зон записи: `raw/` — неизменяемые источники, `wiki/` — синтезированное знание, `.claude/` — декларации поведения агента (скиллы, хуки), `bin/` — детерминированные python-скрипты, снимающие с LLM алгоритмические задачи.
 
-## Команды и subagents
+Структура wiki реализует гибридный фреймворк организации знаний:
 
-OpenCode разделяет slash-команды (запуск через `/`) и subagents (вызов через `@`). Команды лежат в [`.opencode/commands/`](./.opencode/commands), агенты — в [`.opencode/agents/`](./.opencode/agents).
+- **иерархия** — `wiki/domains/` как навигационные хабы (map of content);
+- **Zettelkasten** — `wiki/ideas/` + `wiki/entities/` с плотными wikilinks;
+- **Mind Mapping** — `wiki/minds/` через `/brainstorm`.
 
-### Slash-команды
+```
+llm-wiki/
+├── .claude/         # скиллы и хуки агента (CLAUDE.md, skills/, settings.json)
+├── _templates/      # шаблоны страниц: idea / entity / domain / question / mind
+├── assets/          # баннер, архитектурные схемы, отчёт ВКР
+├── bin/             # инфраструктурные скрипты: эмбеддинги, индекс, lint, дашборд
+├── raw/             # per-user источники: md, pdf, транскрипты (gitignored)
+├── wiki/            # per-user синтез: ideas, entities, domains, questions, minds (gitignored)
+└── ARCHITECTURE.md  # design-doc: контракты слоёв, скиллов, скриптов
+```
 
-| Команда | Что делает |
+### Архитектурные схемы
+
+<details>
+<summary><b>1. Цикл работы агента</b></summary>
+<p align="center"><img src="./assets/scheme-01.svg" alt="Цикл работы агента" width="720"/></p>
+</details>
+
+<details>
+<summary><b>2. Опорные операции исходного паттерна LLM Wiki</b></summary>
+<p align="center"><img src="./assets/scheme-02.svg" alt="Опорные операции LLM Wiki" width="720"/></p>
+</details>
+
+<details>
+<summary><b>3. Четырёхуровневая архитектура vault</b></summary>
+<p align="center"><img src="./assets/scheme-03.svg" alt="Четырёхуровневая архитектура vault" width="720"/></p>
+</details>
+
+<details>
+<summary><b>4. Жизненный цикл горячего кэша контекста</b></summary>
+<p align="center"><img src="./assets/scheme-04.svg" alt="Жизненный цикл wiki/cache.md" width="720"/></p>
+</details>
+
+<details>
+<summary><b>5. Гибридный поиск при запросе к базе</b></summary>
+<p align="center"><img src="./assets/scheme-05.svg" alt="Конвейер обработки запроса в query" width="720"/></p>
+</details>
+
+<details>
+<summary><b>6. Детерминированная регенерация производных артефактов</b></summary>
+<p align="center"><img src="./assets/scheme-06.svg" alt="Поток данных Stop-хука" width="720"/></p>
+</details>
+
+<details>
+<summary><b>7. Унифицированный конвейер ingest для разных форматов</b></summary>
+<p align="center"><img src="./assets/scheme-07.svg" alt="Конвейер ingest" width="720"/></p>
+</details>
+
+<details>
+<summary><b>8. Цикл фиксации мыслей (brainstorm)</b></summary>
+<p align="center"><img src="./assets/scheme-08.svg" alt="Цикл brainstorm" width="720"/></p>
+</details>
+
+<details>
+<summary><b>9. Двухконтурное обновление дашборда состояния vault</b></summary>
+<p align="center"><img src="./assets/scheme-09.svg" alt="Двухконтурная схема дашборда" width="720"/></p>
+</details>
+
+<details>
+<summary><b>10. Трёхслойный аудит целостности базы знаний</b></summary>
+<p align="center"><img src="./assets/scheme-10.svg" alt="Трёхслойная архитектура lint" width="720"/></p>
+</details>
+
+## Стек технологий
+
+| Компонент | Технология |
 | --- | --- |
-| `/ingest` | Читает источник из `raw/` или URL, синтезирует страницы `ideas/entities`, ставит wikilinks |
-| `/query` | Отвечает на вопрос из vault: cache → index → relevant pages |
-| `/save` | Сохраняет ответ или инсайт из чата как wiki-страницу |
-| `/brainstorm` | Модерирует мозговой штурм; склеивает permanent note (`mind`) дословно из реплик |
-| `/lint` | Статические + LLM-проверки wiki, автофиксы, диалог по ask-issues |
-| `/kn-map` | UMAP по семантике + force-graph по wikilinks; рендер в `wiki/meta/kn-maps/` |
-| `/transcribe` | PDF/DOCX → markdown в `raw/` |
+| Агентская среда | [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) + Claude Opus 4.7 |
+| Инфраструктурные скрипты | Python 3.11+ (pymupdf4llm, umap-learn, networkx, tiktoken) |
+| Семантический поиск | эмбеддинг-модель qwen3-embedding-8b (Ollama / OpenAI-compatible API) |
+| Интерфейс пользователя | Obsidian + плагин [Claudian](https://github.com/YishenTu/claudian) |
+| Визуализация | Cytoscape.js, Chart.js (vendored) |
+| Конвертация источников | pymupdf, pandoc, whisper-cpp, ffmpeg, [defuddle](https://github.com/kepano/defuddle) |
+| Версионирование | Git (auto-commit каждого хода агента) |
 
-### Subagents (через `@`)
+## Ветки репозитория
 
-| Subagent | Что делает |
+| Ветка | Назначение |
 | --- | --- |
-| `@defuddle` | Чистит web-страницы от nav/ads/sidebar, отдаёт markdown для url-ingest |
-| `@obsidian-bases` | Создание Obsidian Bases-файлов (.base) для динамических view |
-| `@obsidian-markdown` | Гайд по Obsidian-flavored markdown: wikilinks, embeds, properties |
+| [`main`](../../tree/main) | Основная реализация под Claude Code — готовый к использованию шаблон vault |
+| [`tests`](../../tree/tests) | Unit-тесты инфраструктурных скриптов `bin/` (373 теста, pytest) |
+| [`benchmarking`](../../tree/benchmarking) | Скрипты и результаты количественных замеров эффективности архитектурных решений |
+| [`opencode`](../../tree/opencode) | Экспериментальный порт на открытый CLI-агент [opencode](https://opencode.ai/) |
 
-### Авто-хуки
+## Быстрый старт
 
-[`.opencode/plugins/wiki-hooks.ts`](./.opencode/plugins/wiki-hooks.ts) — Bun-плагин, после каждого turn'а агента запускает `bin/embed.py update`, `bin/gen_index.py` и `bin/gen_dashboards.py`. При компакции напоминает обновить `wiki/cache.md`.
-
----
-
-## Quick start
-
-Требуется [opencode](https://opencode.ai/), Python 3.11+ и (опционально для url-ingest) Node.
+Требуются [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) и Python 3.11+.
 
 ```bash
-git clone <repo> && cd llm-wiki
-git checkout opencode
-
-bash bin/setup.sh           # python venv + dependencies
-bash bin/setup-vault.sh     # scaffold wiki/ + raw/ директорий
-npm install -g defuddle     # опционально: для /ingest <url>
-
-# одноразовый логин в провайдер (ключ → ~/.local/share/opencode/auth.json)
-opencode providers login openrouter
-
-opencode                    # запуск агента в этой директории
+git clone https://github.com/matvej-melikhov/karpathy-llm-wiki.git && cd karpathy-llm-wiki
+bash bin/init.sh         # интерактивный wizard: зависимости, .env, Obsidian, git
+claude                   # запустить агента
 ```
 
-Сменить модель — поправить `model` в `opencode.json` либо флагом `opencode -m openrouter/<provider>/<model>`. Список — `opencode models openrouter`.
+Wizard проводит через установку опциональных компонентов (pandoc, whisper, defuddle, embedding-провайдер), показывает каждую команду перед выполнением и в конце переинициализирует git под ваш remote.
 
-Для `bin/embed.py` (отдельный embedding-пайплайн) ключ читается из `.env` в корне: `EMBED_API_KEY`, `EMBED_HOST`, `EMBED_MODEL`.
+> [!NOTE]
+> `ANTHROPIC_API_KEY` не хранится в `.env` — им управляет Claude Code напрямую (`claude config` или переменная окружения).
 
-В сессии:
-
-```
-> /ingest raw/моя-статья.md
-> /query что такое Bradley-Terry?
-> /brainstorm бустинг моделей
-> /lint
-```
-
-Wiki полностью совместима с Obsidian — открывается как обычный vault и параллельно редактируется руками.
-
----
-
-## Структура репозитория
+Первая сессия:
 
 ```
-.opencode/       # OpenCode: agents, commands, plugins (Bun-хуки)
-_templates/      # frontmatter templates: idea / entity / domain / question / mind / meta
-assets/          # ассеты README (cover image)
-bin/             # генераторы (embed, gen_index, knowledge_map, lint, transcribe…)
-raw/             # per-user источники (gitignored)
-wiki/            # per-user синтез (gitignored)
-opencode.json    # конфиг: модель, permission-policy, MCP
-AGENTS.md        # схема страниц, frontmatter, правила vault'а (читается opencode'ом)
-ARCHITECTURE.md  # design-doc: контракты слоёв и команд
-README.md
+/ingest raw/test.md     — синтезировать источник в wiki-страницы
+/query что такое RLHF?  — спросить по базе
+/edge                   — посмотреть фронтир (что стоит углубить)
+/lint                   — проверить связность wiki
+/snapshot               — собрать дашборд (UMAP, граф, sankey)
+/help                   — справка по любому скиллу
 ```
 
-`bin/embed.py`, `bin/gen_index.py`, `bin/gen_dashboards.py` запускаются автоматически Bun-плагином после каждого turn'а — команды их не вызывают.
+Wiki совместима с Obsidian — откройте папку как vault (`Manage Vaults → Open folder as vault`).
 
----
+## Публикации
 
-## Ветки
-
-- **`main`** — реализация под Claude Code.
-- **`opencode`** — эта ветка: альтернативная конфигурация под opencode CLI.
-
----
-
-## Контекст
-
-Часть ВКР по гибридному фреймворку организации знаний (иерархия + Zettelkasten + Mind Mapping). Реализация ножек:
-
-- **иерархия** — `wiki/domains/` как MOC (map of content);
-- **Zettelkasten** — `wiki/ideas/` + `wiki/entities/` + плотные wikilinks;
-- **Mind Mapping** — `wiki/minds/` через `/brainstorm`.
+- **Отчёт ВКР**: «Систематизация знаний с применением средств искусственного интеллекта» — СПбГЭТУ «ЛЭТИ», 2026. [Полный текст (PDF)](./assets/thesis.pdf)
+- **Статья**: Мелихов М.А. Программная реализация паттерна LLM Wiki для систематизации персональных знаний // Студенческий вестник: электрон. научн. журн. 2026. № 22(402). URL: <https://www.internauka.org/journal/stud/herald/402>
+- **Исходная идея паттерна**: Andrej Karpathy, [LLM Wiki (gist)](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
 
 ## Лицензия
 
-MIT
+[MIT](./LICENSE)
