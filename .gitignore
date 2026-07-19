@@ -90,3 +90,6 @@ __pycache__/
 *.png
 *.jpg
 *.webp
+
+# === Ассеты README (баннер, схемы) ===
+!/assets/*.png
