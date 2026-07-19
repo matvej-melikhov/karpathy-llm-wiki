@@ -1,4 +1,4 @@
-# llm-wiki
+# Karpathy LLM Wiki
 
 <p align="center">
   <img src="./assets/llm-wiki-overview.png" alt="llm-wiki — персональная база знаний под управлением ИИ-агента" width="100%"/>
@@ -7,12 +7,12 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Claude%20Code-agent-d97757" alt="Claude Code"/>
   <img src="https://img.shields.io/badge/Python-3.11+-3776ab" alt="Python 3.11+"/>
-  <img src="https://img.shields.io/badge/Obsidian-vault-7c3aed" alt="Obsidian"/>
+  <img src="https://img.shields.io/badge/UI-Obsidian-7c3aed" alt="Интерфейс — Obsidian"/>
   <img src="https://img.shields.io/badge/tests-373%20passed-2ea44f" alt="tests"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT"/>
 </p>
 
-**llm-wiki** — программная реализация паттерна [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f), предложенного Андреем Карпаты. Вместо классического RAG, который заново читает сырые документы при каждом запросе, ИИ-агент **однократно компилирует** источники в постоянную wiki из связанных markdown-страниц — и дальше сам её ведёт: создаёт страницы, проставляет перекрёстные ссылки, следит за целостностью. Пользователь работает с готовой базой через привычный Obsidian.
+**Karpathy LLM Wiki** — программная реализация паттерна [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f), предложенного Андреем Карпаты. Вместо классического RAG, который заново читает сырые документы при каждом запросе, ИИ-агент **однократно компилирует** источники в постоянную wiki из связанных markdown-страниц — и дальше сам её ведёт: создаёт страницы, проставляет перекрёстные ссылки, следит за целостностью. Пользователь работает с готовой базой через привычный Obsidian.
 
 Проект выполнен в рамках выпускной квалификационной работы (СПбГЭТУ «ЛЭТИ», 2026) и доводит концептуальное описание паттерна до практического инструмента.
 
@@ -53,7 +53,7 @@ Vault устроен как четыре слоя с явным контракт
 - **Mind Mapping** — `wiki/minds/` через `/brainstorm`.
 
 ```
-llm-wiki/
+karpathy-llm-wiki/
 ├── .claude/         # скиллы и хуки агента (CLAUDE.md, skills/, settings.json)
 ├── _templates/      # шаблоны страниц: idea / entity / domain / question / mind
 ├── assets/          # баннер, архитектурные схемы, отчёт ВКР
@@ -149,7 +149,7 @@ claude                   # запустить агента
 Wizard проводит через установку опциональных компонентов (pandoc, whisper, defuddle, embedding-провайдер), показывает каждую команду перед выполнением и в конце переинициализирует git под ваш remote.
 
 > [!NOTE]
-> `ANTHROPIC_API_KEY` не хранится в `.env` — им управляет Claude Code напрямую (`claude config` или переменная окружения).
+> Для работы агента достаточно подписки Claude Pro — отдельный API-ключ не обязателен. Эмбеддинг-модель можно поднять локально через Ollama: тогда семантический поиск бесплатен, а содержимое базы не покидает вашу машину.
 
 Первая сессия:
 
