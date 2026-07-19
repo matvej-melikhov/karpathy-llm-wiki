@@ -5,11 +5,11 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Claude%20Code-agent-d97757" alt="Claude Code"/>
+  <img src="https://img.shields.io/badge/Agent-Claude%20Code-d97757" alt="Agent — Claude Code"/>
+  <img src="https://img.shields.io/badge/UI-Obsidian-7c3aed" alt="UI — Obsidian"/>
   <img src="https://img.shields.io/badge/Python-3.11+-3776ab" alt="Python 3.11+"/>
-  <img src="https://img.shields.io/badge/UI-Obsidian-7c3aed" alt="Интерфейс — Obsidian"/>
-  <img src="https://img.shields.io/badge/tests-373%20passed-2ea44f" alt="tests"/>
-  <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT"/>
+  <img src="https://img.shields.io/badge/Tests-373%20passed-2ea44f" alt="Tests — 373 passed"/>
+  <img src="https://img.shields.io/badge/License-MIT-lightgrey" alt="License — MIT"/>
 </p>
 
 **Karpathy LLM Wiki** — программная реализация паттерна [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f), предложенного Андреем Карпаты. Вместо классического RAG, который заново читает сырые документы при каждом запросе, ИИ-агент **однократно компилирует** источники в постоянную wiki из связанных markdown-страниц — и дальше сам её ведёт: создаёт страницы, проставляет перекрёстные ссылки, следит за целостностью. Пользователь работает с готовой базой через привычный Obsidian.
