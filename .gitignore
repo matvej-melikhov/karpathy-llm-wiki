@@ -37,6 +37,9 @@ __pycache__/
 # === ВКР отчёт ===
 /z_report/
 
+# === Бенчмарки (см. ветку benchmarking) ===
+/benchmarking/
+
 # === Тесты (см. ветку tests) ===
 /bin/tests/
 
@@ -87,3 +90,6 @@ __pycache__/
 *.png
 *.jpg
 *.webp
+
+# === Ассеты README (баннер, схемы) ===
+!/assets/*.png
